@@ -70,3 +70,13 @@ export interface SubredditSubscription {
   name: string;
   icon?: string;
 }
+
+// AI Configuration Types
+export type AIProvider = 'gemini' | 'openrouter';
+
+export interface AIConfig {
+  provider: AIProvider;
+  openRouterKey?: string;
+  openRouterModel?: string;
+  minZenScore?: number; // 0-100, threshold for filtering
+}

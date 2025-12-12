@@ -2,93 +2,125 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import PostCard from './components/PostCard';
 import PostDetail from './components/PostDetail';
-import { FeedType, FilteredPost, RedditPostData } from './types';
+import SettingsModal from './components/SettingsModal';
+import { FeedType, FilteredPost, RedditPostData, AIConfig } from './types';
 import { fetchFeed } from './services/redditService';
 import { analyzePostsForZen } from './services/geminiService';
-import { Loader2, RefreshCw, Menu, Moon, Sun, X } from 'lucide-react';
+import { Loader2, RefreshCw, Menu, Moon, Sun, X, Settings } from 'lucide-react';
+
+// Helper to safely load from local storage
+const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
+  try {
+    const saved = localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : defaultValue;
+  } catch (e) {
+    console.warn(`Failed to load ${key} from storage`, e);
+    return defaultValue;
+  }
+};
 
 const App: React.FC = () => {
-  // State
-  const [currentFeed, setCurrentFeed] = useState<FeedType>('home');
-  const [currentSub, setCurrentSub] = useState<string | undefined>(undefined);
+  // --- State Initialization (Lazy loading from LocalStorage) ---
+  
+  // Navigation State
+  const [currentFeed, setCurrentFeed] = useState<FeedType>(() => loadFromStorage('zen_last_feed', 'home'));
+  const [currentSub, setCurrentSub] = useState<string | undefined>(() => loadFromStorage('zen_last_sub', undefined));
+  
+  // Data State
   const [posts, setPosts] = useState<FilteredPost[]>([]);
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [selectedPost, setSelectedPost] = useState<FilteredPost | null>(null);
   const [after, setAfter] = useState<string | null>(null);
-  const [followedSubs, setFollowedSubs] = useState<string[]>([]);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
-  const [blockedCount, setBlockedCount] = useState(0);
+
+  // User Preferences State
+  const [followedSubs, setFollowedSubs] = useState<string[]>(() => {
+    const saved = loadFromStorage<string[]>('zen_followed_subs', []);
+    if (saved.length === 0) {
+        return ['CozyPlaces', 'MadeMeSmile', 'wholesomememes', 'nature'];
+    }
+    return saved;
+  });
+
+  const [blockedCount, setBlockedCount] = useState(() => loadFromStorage<number>('zen_blocked_count', 0));
   
-  // Infinite Scroll Ref
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('zen_theme');
+    if (saved === 'dark' || saved === 'light') return saved;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+
+  const [aiConfig, setAiConfig] = useState<AIConfig>(() => ({
+    provider: 'gemini',
+    minZenScore: 50,
+    ...loadFromStorage('zen_ai_config', {})
+  }));
+  
+  // UI State
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const observerTarget = useRef<HTMLDivElement>(null);
 
-  // Theme Init
+  // --- Effects for Persistence ---
+
+  // Apply Theme
   useEffect(() => {
-    const savedTheme = localStorage.getItem('zen_theme');
-    if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      setTheme('dark');
+    localStorage.setItem('zen_theme', theme);
+    if (theme === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
-      setTheme('light');
       document.documentElement.classList.remove('dark');
     }
-  }, []);
+  }, [theme]);
 
-  // Blocked Count Init
+  // Persist Navigation
   useEffect(() => {
-    const savedCount = localStorage.getItem('zen_blocked_count');
-    if (savedCount) {
-        setBlockedCount(parseInt(savedCount, 10));
+    localStorage.setItem('zen_last_feed', JSON.stringify(currentFeed));
+    if (currentSub) {
+        localStorage.setItem('zen_last_sub', JSON.stringify(currentSub));
+    } else {
+        localStorage.removeItem('zen_last_sub');
     }
-  }, []);
+  }, [currentFeed, currentSub]);
 
-  // Persist blocked count
+  // Persist Followed Subs
+  useEffect(() => {
+    localStorage.setItem('zen_followed_subs', JSON.stringify(followedSubs));
+  }, [followedSubs]);
+
+  // Persist Blocked Count
   useEffect(() => {
     localStorage.setItem('zen_blocked_count', blockedCount.toString());
   }, [blockedCount]);
 
-  const toggleTheme = () => {
-    const newTheme = theme === 'light' ? 'dark' : 'light';
-    setTheme(newTheme);
-    localStorage.setItem('zen_theme', newTheme);
-    if (newTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  };
-
-  // Load followed subs from local storage
+  // Persist AI Config
   useEffect(() => {
-    const saved = localStorage.getItem('zen_followed_subs');
-    if (saved) {
-      setFollowedSubs(JSON.parse(saved));
-    } else {
-        // Default follows for new users so Home isn't empty/boring
-        const defaults = ['CozyPlaces', 'MadeMeSmile', 'wholesomememes', 'nature'];
-        setFollowedSubs(defaults);
-        localStorage.setItem('zen_followed_subs', JSON.stringify(defaults));
-    }
-  }, []);
+    localStorage.setItem('zen_ai_config', JSON.stringify(aiConfig));
+  }, [aiConfig]);
 
-  const saveFollows = (subs: string[]) => {
-      setFollowedSubs(subs);
-      localStorage.setItem('zen_followed_subs', JSON.stringify(subs));
+  // --- Handlers ---
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
 
   const handleFollow = (sub: string) => {
       if (!followedSubs.includes(sub)) {
-          saveFollows([...followedSubs, sub]);
+          setFollowedSubs(prev => [...prev, sub]);
       }
   };
 
   const handleUnfollow = (sub: string) => {
-      saveFollows(followedSubs.filter(s => s !== sub));
+      setFollowedSubs(prev => prev.filter(s => s !== sub));
   };
 
-  // Main Data Fetching Logic
+  const handleSaveSettings = (config: AIConfig) => {
+      setAiConfig(config);
+      // Logic handled by effect now
+  };
+
+  // --- Main Data Fetching Logic ---
+  
   const loadPosts = useCallback(async (isLoadMore = false) => {
     if (loading || analyzing) return;
     
@@ -120,11 +152,11 @@ const App: React.FC = () => {
           return;
       }
 
-      // Analyze with Gemini
+      // Analyze with Gemini/AI Service
       if (!isLoadMore) setLoading(false); // Stop main loader if initial load
       setAnalyzing(true);
 
-      const analysisResults = await analyzePostsForZen(rawPosts);
+      const analysisResults = await analyzePostsForZen(rawPosts, aiConfig);
       
       // Update Blocked Count
       const blockedInThisBatch = analysisResults.filter(r => r.isRageBait).length;
@@ -135,10 +167,16 @@ const App: React.FC = () => {
       // Merge results
       const processedPosts: FilteredPost[] = rawPosts.map(post => {
         const analysis = analysisResults.find(a => a.id === post.id);
+        const zenScore = analysis ? analysis.zenScore : 50;
+        
+        // Double check rage bait logic client side for safety
+        const threshold = aiConfig.minZenScore ?? 50;
+        const calculatedIsRageBait = zenScore < threshold;
+
         return {
           ...post,
-          isRageBait: analysis ? analysis.isRageBait : false,
-          zenScore: analysis ? analysis.zenScore : 50,
+          isRageBait: calculatedIsRageBait,
+          zenScore: zenScore,
           zenReason: analysis ? analysis.reason : 'Pending'
         };
       }).filter(p => !p.isRageBait); // FILTER OUT RAGE BAIT
@@ -150,7 +188,7 @@ const App: React.FC = () => {
       setLoading(false);
       setAnalyzing(false);
     }
-  }, [currentFeed, currentSub, after, followedSubs, loading, analyzing]);
+  }, [currentFeed, currentSub, after, followedSubs, loading, analyzing, aiConfig]);
 
   // Initial load when feed changes
   useEffect(() => {
@@ -198,6 +236,9 @@ const App: React.FC = () => {
             ZenReddit
         </h1>
         <div className="flex items-center gap-2">
+             <button onClick={() => setSettingsOpen(true)} className="p-2 text-stone-600 dark:text-stone-400">
+                <Settings size={20} />
+            </button>
             <button onClick={toggleTheme} className="p-2 text-stone-600 dark:text-stone-400">
                 {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
             </button>
@@ -223,6 +264,7 @@ const App: React.FC = () => {
                 theme={theme}
                 toggleTheme={toggleTheme}
                 blockedCount={blockedCount}
+                onOpenSettings={() => setSettingsOpen(true)}
             />
         </div>
       )}
@@ -239,6 +281,7 @@ const App: React.FC = () => {
             theme={theme}
             toggleTheme={toggleTheme}
             blockedCount={blockedCount}
+            onOpenSettings={() => setSettingsOpen(true)}
         />
       </div>
 
@@ -312,6 +355,14 @@ const App: React.FC = () => {
             onClose={() => setSelectedPost(null)} 
         />
       )}
+
+      {/* Settings Modal */}
+      <SettingsModal 
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        config={aiConfig}
+        onSave={handleSaveSettings}
+      />
 
     </div>
   );

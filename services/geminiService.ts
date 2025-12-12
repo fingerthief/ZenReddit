@@ -1,8 +1,9 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { RedditPostData } from "../types";
+import { RedditPostData, AIConfig } from "../types";
 
 // Initialize Gemini Client
 // We assume process.env.API_KEY is available as per instructions.
+// This is used ONLY when provider is 'gemini'
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export interface AnalysisResult {
@@ -12,7 +13,7 @@ export interface AnalysisResult {
   reason: string;
 }
 
-export const analyzePostsForZen = async (posts: RedditPostData[]): Promise<AnalysisResult[]> => {
+export const analyzePostsForZen = async (posts: RedditPostData[], config?: AIConfig): Promise<AnalysisResult[]> => {
   if (posts.length === 0) return [];
 
   // Prepare a concise payload to save tokens and improve speed
@@ -20,10 +21,12 @@ export const analyzePostsForZen = async (posts: RedditPostData[]): Promise<Analy
     id: p.id,
     title: p.title,
     subreddit: p.subreddit,
-    body_snippet: p.selftext ? p.selftext.substring(0, 500) : "No text content", // Increased context to 500 chars
+    body_snippet: p.selftext ? p.selftext.substring(0, 500) : "No text content", 
   }));
 
-  const prompt = `
+  const threshold = config?.minZenScore ?? 50;
+
+  const systemPrompt = `
     Analyze the following Reddit posts to curate a "Zen" feed. 
     Your goal is to strictly filter out rage bait, intentionally divisive politics, aggressive arguments, and content designed to induce anxiety or anger.
     
@@ -37,8 +40,21 @@ export const analyzePostsForZen = async (posts: RedditPostData[]): Promise<Analy
     - 0 = Pure Rage Bait (Toxic, divisive, shouting, public freakouts).
     
     Output Requirements:
-    - Mark "isRageBait" as true if the zenScore is below 50.
+    - Mark "isRageBait" as true if the zenScore is below ${threshold}.
     - Provide a very short "reason" (max 10 words).
+  `;
+
+  // Default to Gemini if no config provided or provider is gemini
+  if (!config || config.provider === 'gemini') {
+    return analyzeWithGemini(postsPayload, systemPrompt);
+  } else {
+    return analyzeWithOpenRouter(postsPayload, systemPrompt, config);
+  }
+};
+
+const analyzeWithGemini = async (postsPayload: any[], systemPrompt: string): Promise<AnalysisResult[]> => {
+  const prompt = `
+    ${systemPrompt}
 
     Input Data:
     ${JSON.stringify(postsPayload)}
@@ -69,18 +85,83 @@ export const analyzePostsForZen = async (posts: RedditPostData[]): Promise<Analy
     const jsonText = response.text;
     if (!jsonText) return [];
 
-    const results = JSON.parse(jsonText) as AnalysisResult[];
-    return results;
+    return JSON.parse(jsonText) as AnalysisResult[];
 
   } catch (error) {
     console.error("Gemini Analysis Failed:", error);
-    // Fallback: Return neutral scores if AI fails to avoid blocking everything, 
-    // but default to slightly lower score to be safe.
-    return posts.map(p => ({
+    return fallbackResult(postsPayload);
+  }
+};
+
+const analyzeWithOpenRouter = async (postsPayload: any[], systemPrompt: string, config: AIConfig): Promise<AnalysisResult[]> => {
+    if (!config.openRouterKey) {
+        console.warn("OpenRouter selected but no key provided");
+        return fallbackResult(postsPayload);
+    }
+
+    try {
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${config.openRouterKey}`,
+                "HTTP-Referer": window.location.origin, // Optional, for including your app on openrouter.ai rankings.
+                "X-Title": "ZenReddit",
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                "model": config.openRouterModel || "google/gemini-2.0-flash-lite-preview-02-05:free",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": systemPrompt + "\n\nRETURN ONLY A JSON ARRAY matching the schema: [{id: string, isRageBait: boolean, zenScore: number, reason: string}]"
+                    },
+                    {
+                        "role": "user",
+                        "content": JSON.stringify(postsPayload)
+                    }
+                ],
+                "response_format": { "type": "json_object" } 
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`OpenRouter API Error: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content;
+        
+        if (!content) return [];
+
+        // Attempt to parse JSON from the content string (it might be wrapped in markdown blocks)
+        const cleanedContent = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleanedContent);
+
+        // Handle case where model returns object wrapping the array (e.g. { "posts": [...] })
+        if (Array.isArray(parsed)) {
+            return parsed;
+        } else if (parsed.items && Array.isArray(parsed.items)) {
+            return parsed.items;
+        } else {
+             // Try to find the first array value in the object
+             const values = Object.values(parsed);
+             const foundArray = values.find(v => Array.isArray(v));
+             if (foundArray) return foundArray as AnalysisResult[];
+        }
+        
+        return [];
+
+    } catch (error) {
+        console.error("OpenRouter Analysis Failed:", error);
+        return fallbackResult(postsPayload);
+    }
+}
+
+const fallbackResult = (postsPayload: any[]): AnalysisResult[] => {
+    return postsPayload.map(p => ({
         id: p.id,
         isRageBait: false,
         zenScore: 50,
         reason: "Analysis unavailable"
     }));
-  }
 };

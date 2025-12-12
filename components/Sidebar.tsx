@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Home, Globe, Plus, Hash, X, Trash2, Moon, Sun, ShieldCheck } from 'lucide-react';
+import { Home, Globe, Plus, Hash, X, Trash2, Moon, Sun, ShieldCheck, Settings } from 'lucide-react';
 import { FeedType } from '../types';
 import { searchSubreddits } from '../services/redditService';
 
@@ -13,6 +13,7 @@ interface SidebarProps {
   theme: 'light' | 'dark';
   toggleTheme: () => void;
   blockedCount: number;
+  onOpenSettings: () => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -24,7 +25,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   onUnfollow,
   theme,
   toggleTheme,
-  blockedCount
+  blockedCount,
+  onOpenSettings
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<string[]>([]);
@@ -54,13 +56,22 @@ const Sidebar: React.FC<SidebarProps> = ({
             </h1>
             <p className="text-xs text-stone-400 mt-1">Peaceful browsing, AI filtered.</p>
         </div>
-        <button 
-            onClick={toggleTheme} 
-            className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 transition-colors"
-            title="Toggle Theme"
-        >
-            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-        </button>
+        <div className="flex gap-1">
+             <button 
+                onClick={onOpenSettings} 
+                className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 transition-colors p-1"
+                title="AI Settings"
+            >
+                <Settings size={18} />
+            </button>
+            <button 
+                onClick={toggleTheme} 
+                className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 transition-colors p-1"
+                title="Toggle Theme"
+            >
+                {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+            </button>
+        </div>
       </div>
 
       <nav className="flex-1 overflow-y-auto p-4 space-y-6">
