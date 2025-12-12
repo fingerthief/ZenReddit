@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { Home, Globe, Plus, Hash, X, Trash2, Moon, Sun, ShieldCheck, Settings } from 'lucide-react';
+import { Flame, Globe, Plus, Hash, X, Trash2, Moon, Sun, ShieldCheck, Settings } from 'lucide-react';
 import { FeedType } from '../types';
 import { searchSubreddits } from '../services/redditService';
 
@@ -96,18 +97,18 @@ const Sidebar: React.FC<SidebarProps> = ({
         <div>
           <h3 className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-2 px-2">Feeds</h3>
           <button 
-            onClick={() => onNavigate('home')}
-            className={`w-full flex items-center space-x-3 px-2 py-2 rounded-lg transition-colors ${currentFeed === 'home' ? 'bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100' : 'text-stone-600 dark:text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-800'}`}
+            onClick={() => onNavigate('popular')}
+            className={`w-full flex items-center space-x-3 px-2 py-2 rounded-lg transition-colors ${currentFeed === 'popular' ? 'bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100' : 'text-stone-600 dark:text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-800'}`}
           >
-            <Home size={18} />
-            <span>Home</span>
+            <Flame size={18} />
+            <span>Popular</span>
           </button>
           <button 
             onClick={() => onNavigate('all')}
             className={`w-full flex items-center space-x-3 px-2 py-2 rounded-lg transition-colors ${currentFeed === 'all' ? 'bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100' : 'text-stone-600 dark:text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-800'}`}
           >
             <Globe size={18} />
-            <span>All Popular</span>
+            <span>All</span>
           </button>
         </div>
 

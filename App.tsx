@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import PostCard from './components/PostCard';
@@ -7,7 +8,7 @@ import ScanningVisualizer from './components/ScanningVisualizer';
 import { FeedType, FilteredPost, RedditPostData, AIConfig } from './types';
 import { fetchFeed } from './services/redditService';
 import { analyzePostsForZen } from './services/geminiService';
-import { Loader2, RefreshCw, Menu, Moon, Sun, X, Settings, TriangleAlert } from 'lucide-react';
+import { Loader2, RefreshCw, Menu, Moon, Sun, X, Settings, TriangleAlert, CloudOff } from 'lucide-react';
 
 // Helper to safely load from local storage
 const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
@@ -24,14 +25,21 @@ const App: React.FC = () => {
   // --- State Initialization (Lazy loading from LocalStorage) ---
   
   // Navigation State
-  // Default to 'all' (Popular) instead of 'home'
-  const [currentFeed, setCurrentFeed] = useState<FeedType>(() => loadFromStorage('zen_last_feed', 'all'));
+  // Default to 'popular' as the main feed
+  const [currentFeed, setCurrentFeed] = useState<FeedType>(() => {
+    const saved = loadFromStorage('zen_last_feed', 'popular');
+    // Migration: If user had 'home' stored, switch to 'popular'
+    // @ts-ignore
+    if (saved === 'home') return 'popular';
+    return saved;
+  });
   const [currentSub, setCurrentSub] = useState<string | undefined>(() => loadFromStorage('zen_last_sub', undefined));
   
   // Data State
   const [posts, setPosts] = useState<FilteredPost[]>([]);
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [selectedPost, setSelectedPost] = useState<FilteredPost | null>(null);
   const [after, setAfter] = useState<string | null>(null);
 
@@ -169,6 +177,7 @@ const App: React.FC = () => {
     if (!isLoadMore) {
         setPosts([]); 
         setLoading(true);
+        setError(null);
     } else {
         setAnalyzing(true); // Show analyzing spinner at bottom
     }
@@ -223,8 +232,12 @@ const App: React.FC = () => {
       }).filter(p => !p.isRageBait); // FILTER OUT RAGE BAIT
 
       setPosts(prev => isLoadMore ? [...prev, ...processedPosts] : processedPosts);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      // Only set error if we don't have posts to show (initial load)
+      if (!isLoadMore) {
+        setError(e.message || "Failed to load content. Reddit might be blocking connections.");
+      }
     } finally {
       setLoading(false);
       setAnalyzing(false);
@@ -239,22 +252,12 @@ const App: React.FC = () => {
     loadPosts(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentFeed, currentSub]); 
-
-  // Reload Home feed if subscriptions change while we are on Home
-  useEffect(() => {
-    if (currentFeed === 'home') {
-        setPosts([]);
-        setAfter(null);
-        loadPosts(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [followedSubs]); // Only re-run if followedSubs changes
   
   // Infinite Scroll Observer
   useEffect(() => {
     const observer = new IntersectionObserver(
         entries => {
-            if (entries[0].isIntersecting && !loading && !analyzing && posts.length > 0) {
+            if (entries[0].isIntersecting && !loading && !analyzing && posts.length > 0 && !error) {
                 loadPosts(true);
             }
         },
@@ -269,7 +272,7 @@ const App: React.FC = () => {
     return () => {
         if (currentTarget) observer.unobserve(currentTarget);
     };
-  }, [loading, analyzing, posts.length, loadPosts]);
+  }, [loading, analyzing, posts.length, loadPosts, error]);
 
   const handleNavigate = (type: FeedType, sub?: string) => {
     setCurrentFeed(type);
@@ -364,8 +367,8 @@ const App: React.FC = () => {
         <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
                 <h2 className="text-3xl font-light text-stone-800 dark:text-stone-100 tracking-tight">
-                    {currentFeed === 'home' && "Your Zen Feed"}
-                    {currentFeed === 'all' && "Popular & Peaceful"}
+                    {currentFeed === 'popular' && "Popular on Reddit"}
+                    {currentFeed === 'all' && "All of Reddit"}
                     {currentFeed === 'subreddit' && `r/${currentSub}`}
                 </h2>
                 <p className="text-stone-500 dark:text-stone-400 mt-1">
@@ -393,15 +396,33 @@ const App: React.FC = () => {
                 </div>
             )}
 
+            {/* Error State */}
+            {error && posts.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-20 text-center animate-in fade-in">
+                  <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-full mb-4">
+                    <CloudOff size={40} className="text-red-400 dark:text-red-500" />
+                  </div>
+                  <h3 className="text-lg font-medium text-stone-800 dark:text-stone-200 mb-2">Connection Issue</h3>
+                  <p className="text-stone-500 dark:text-stone-400 max-w-sm mb-6">
+                    {error}
+                  </p>
+                  <button 
+                    onClick={() => loadPosts(false)}
+                    className="px-6 py-2 bg-stone-800 dark:bg-stone-700 text-white rounded-lg hover:bg-stone-700 dark:hover:bg-stone-600 transition-colors font-medium text-sm"
+                  >
+                    Try Again
+                  </button>
+              </div>
+            )}
+
             {/* Show visualizer while AI analyzes initial batch */}
             {analyzing && posts.length === 0 && (
                 <ScanningVisualizer />
             )}
 
-            {!loading && posts.length === 0 && !analyzing && (
+            {!loading && !error && posts.length === 0 && !analyzing && (
                 <div className="text-center py-20 text-stone-400 dark:text-stone-500">
                     <p>No zen content found right now.</p>
-                    {currentFeed === 'home' && <p className="text-sm mt-2">Try following more subreddits.</p>}
                     {!aiConfig.openRouterKey && (
                         <p className="text-sm mt-4 text-emerald-600 dark:text-emerald-400 cursor-pointer" onClick={() => setSettingsOpen(true)}>
                             Open Settings to add your OpenRouter Key
@@ -419,7 +440,7 @@ const App: React.FC = () => {
             ))}
 
             {/* Infinite Scroll Sentinel */}
-            {posts.length > 0 && (
+            {posts.length > 0 && !error && (
                 <div ref={observerTarget} className="flex justify-center py-8 min-h-[100px]">
                      {(analyzing || loading) && (
                         <div className="flex items-center space-x-2 text-stone-400">

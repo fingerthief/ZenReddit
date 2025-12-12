@@ -1,3 +1,4 @@
+
 // Reddit API Types
 
 export interface RedditPostData {
@@ -64,7 +65,7 @@ export interface FilteredPost extends RedditPostData {
   zenScore?: number; // 0-100, where 100 is pure zen, 0 is pure rage
 }
 
-export type FeedType = 'home' | 'all' | 'subreddit';
+export type FeedType = 'popular' | 'all' | 'subreddit';
 
 export interface SubredditSubscription {
   name: string;
