@@ -13,7 +13,9 @@
     "lucide-react": "^0.560.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "hls.js": "^1.5.8"
+    "hls.js": "^1.5.8",
+    "react-markdown": "^9.0.1",
+    "remark-gfm": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.24",

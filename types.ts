@@ -37,11 +37,23 @@ export interface RedditPost {
   data: RedditPostData;
 }
 
+export interface RedditMore {
+  kind: 'more';
+  data: {
+    count: number;
+    name: string;
+    id: string;
+    parent_id: string;
+    depth: number;
+    children: string[];
+  }
+}
+
 export interface RedditListing {
   kind: 'Listing';
   data: {
     after: string | null;
-    children: RedditPost[];
+    children: (RedditPost | RedditComment | RedditMore)[];
   };
 }
 
@@ -49,6 +61,7 @@ export interface RedditCommentData {
   id: string;
   author: string;
   body: string;
+  body_html?: string;
   score: number;
   created_utc: number;
   replies?: RedditListing | ""; // Reddit API returns empty string for no replies sometimes
