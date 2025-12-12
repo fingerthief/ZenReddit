@@ -16,30 +16,38 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
   };
 
   const getThumbnail = () => {
-    // Determine if it's a video based on API flags or URL extensions
+    // Robust video detection:
+    // 1. Explicit is_video flag
+    // 2. Has secure_media.reddit_video
+    // 3. Has a preview that indicates video/gif
+    // 4. URL extension match (mp4, gifv, etc)
+    // 5. Specific video domains (v.redd.it)
     const isVideo = post.is_video || 
                     !!post.secure_media?.reddit_video || 
-                    (post.url && !!post.url.match(/\.(mp4|gifv|webm)$/i));
+                    !!post.preview?.reddit_video_preview ||
+                    (post.url && !!post.url.match(/\.(mp4|gifv|webm|mkv|mov)$/i)) ||
+                    post.domain === 'v.redd.it';
 
     // Case 1: Has a valid image thumbnail
     if (post.thumbnail && post.thumbnail.startsWith('http')) {
       return (
-        <div className="relative w-16 h-16 md:w-20 md:h-20 mr-3 md:mr-4 shrink-0 group">
+        <div className="relative w-16 h-16 md:w-20 md:h-20 mr-3 md:mr-4 shrink-0 group rounded-md overflow-hidden bg-stone-200 dark:bg-stone-800">
           <img 
             src={post.thumbnail} 
             alt="thumb" 
-            className="w-full h-full object-cover rounded-md bg-stone-200 dark:bg-stone-800" 
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
+            loading="lazy"
           />
           {isVideo && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-md group-hover:bg-black/40 transition-colors">
-               <CirclePlay size={24} className="text-white drop-shadow-md" fill="rgba(0,0,0,0.3)" />
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
+               <CirclePlay size={28} className="text-white drop-shadow-lg opacity-90" strokeWidth={1.5} fill="rgba(0,0,0,0.5)" />
             </div>
           )}
         </div>
       );
     }
     
-    // Case 2: No thumbnail, check if video for icon
+    // Case 2: No thumbnail, check if video for icon placeholder
     if (isVideo) {
          return (
             <div className="w-16 h-16 md:w-20 md:h-20 bg-stone-200 dark:bg-stone-800 rounded-md mr-3 md:mr-4 flex items-center justify-center shrink-0 text-stone-500 dark:text-stone-400 border border-stone-300 dark:border-stone-700">

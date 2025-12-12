@@ -14,12 +14,18 @@ export interface RedditPostData {
   permalink: string;
   created_utc: number;
   url: string;
+  domain?: string;
   thumbnail: string;
   preview?: {
     images: {
       source: { url: string; width: number; height: number };
       resolutions: { url: string; width: number; height: number }[];
     }[];
+    reddit_video_preview?: {
+        fallback_url: string;
+        hls_url?: string;
+        is_gif?: boolean;
+    };
   };
   is_video: boolean;
   secure_media?: {
