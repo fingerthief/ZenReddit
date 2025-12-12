@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import PostCard from './components/PostCard';
@@ -20,6 +19,29 @@ const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
     return defaultValue;
   }
 };
+
+const PostSkeleton = () => (
+  <div className="bg-white dark:bg-stone-900 p-3 md:p-4 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 mb-4 animate-pulse">
+    <div className="flex">
+      <div className="w-16 h-16 md:w-20 md:h-20 bg-stone-200 dark:bg-stone-800 rounded-md mr-3 md:mr-4 shrink-0"></div>
+      <div className="flex-1 min-w-0 py-1 space-y-3">
+        <div className="flex items-center space-x-2">
+            <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-24"></div>
+            <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-4"></div>
+            <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-16"></div>
+        </div>
+        <div className="space-y-2">
+             <div className="h-4 bg-stone-200 dark:bg-stone-800 rounded w-3/4"></div>
+             <div className="h-4 bg-stone-200 dark:bg-stone-800 rounded w-1/2"></div>
+        </div>
+        <div className="flex gap-4 pt-1">
+            <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-12"></div>
+            <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-12"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
 const App: React.FC = () => {
   // --- State Initialization (Lazy loading from LocalStorage) ---
@@ -389,9 +411,9 @@ const App: React.FC = () => {
         <div className="space-y-4">
             {/* Show skeleton loader while fetching initial data from Reddit */}
             {loading && posts.length === 0 && (
-                <div className="space-y-4 animate-pulse">
-                    {[1, 2, 3].map(i => (
-                        <div key={i} className="h-48 bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-800"></div>
+                <div className="space-y-4">
+                    {[1, 2, 3, 4, 5].map(i => (
+                        <PostSkeleton key={i} />
                     ))}
                 </div>
             )}
@@ -417,7 +439,7 @@ const App: React.FC = () => {
 
             {/* Show visualizer while AI analyzes initial batch */}
             {analyzing && posts.length === 0 && (
-                <ScanningVisualizer />
+                <ScanningVisualizer mode="full" />
             )}
 
             {!loading && !error && posts.length === 0 && !analyzing && (
@@ -443,10 +465,7 @@ const App: React.FC = () => {
             {posts.length > 0 && !error && (
                 <div ref={observerTarget} className="flex justify-center py-8 min-h-[100px]">
                      {(analyzing || loading) && (
-                        <div className="flex items-center space-x-2 text-stone-400">
-                            <Loader2 className="animate-spin" size={20} />
-                            <span>Filtering Rage Bait...</span>
-                        </div>
+                        <ScanningVisualizer mode="compact" />
                      )}
                 </div>
             )}
