@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { FilteredPost, RedditComment } from '../types';
 import { fetchComments } from '../services/redditService';
 import { X, ExternalLink, Loader2, ArrowBigUp, ChevronLeft } from 'lucide-react';
+import Hls from 'hls.js';
 
 interface PostDetailProps {
   post: FilteredPost;
@@ -11,6 +12,7 @@ interface PostDetailProps {
 const PostDetail: React.FC<PostDetailProps> = ({ post, onClose }) => {
   const [comments, setComments] = useState<RedditComment[]>([]);
   const [loading, setLoading] = useState(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     const loadComments = async () => {
@@ -21,6 +23,32 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose }) => {
     };
     loadComments();
   }, [post.permalink]);
+
+  // Handle Video Playback with HLS (for sound)
+  useEffect(() => {
+    const video = post.secure_media?.reddit_video;
+    if (!video || !videoRef.current) return;
+
+    let hls: Hls | null = null;
+    const videoEl = videoRef.current;
+
+    // Prioritize HLS URL if available (this combines audio/video)
+    if (Hls.isSupported() && video.hls_url) {
+        hls = new Hls();
+        hls.loadSource(video.hls_url);
+        hls.attachMedia(videoEl);
+    } else if (videoEl.canPlayType('application/vnd.apple.mpegurl') && video.hls_url) {
+        // Native HLS support (Safari)
+        videoEl.src = video.hls_url;
+    } else {
+        // Fallback to the MP4 (often silent on Reddit, but best effort fallback)
+        videoEl.src = video.fallback_url;
+    }
+
+    return () => {
+        if (hls) hls.destroy();
+    };
+  }, [post.secure_media]);
 
   const decodeHtml = (html: string | undefined | null) => {
     if (!html) return "";
@@ -33,9 +61,11 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose }) => {
     if (post.secure_media?.reddit_video) {
         return (
             <video 
+                ref={videoRef}
                 controls 
                 className="w-full rounded-lg mb-4 bg-black max-h-[500px]" 
-                src={post.secure_media.reddit_video.fallback_url}
+                playsInline
+                poster={post.thumbnail && post.thumbnail.startsWith('http') ? post.thumbnail : undefined}
             />
         )
     }

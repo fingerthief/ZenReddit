@@ -1,4 +1,5 @@
 
+
 // Reddit API Types
 
 export interface RedditPostData {
@@ -24,6 +25,7 @@ export interface RedditPostData {
   secure_media?: {
     reddit_video?: {
       fallback_url: string;
+      hls_url?: string;
     };
   };
   is_gallery?: boolean;
