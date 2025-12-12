@@ -1,6 +1,6 @@
 import React from 'react';
 import { FilteredPost } from '../types';
-import { MessageSquare, ArrowBigUp, Image as ImageIcon } from 'lucide-react';
+import { MessageSquare, ArrowBigUp, Image as ImageIcon, PlayCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface PostCardProps {
@@ -16,10 +16,44 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
   };
 
   const getThumbnail = () => {
+    // Determine if it's a video based on API flags or URL extensions
+    const isVideo = post.is_video || 
+                    !!post.secure_media?.reddit_video || 
+                    (post.url && !!post.url.match(/\.(mp4|gifv|webm)$/i));
+
+    // Case 1: Has a valid image thumbnail
     if (post.thumbnail && post.thumbnail.startsWith('http')) {
-      return <img src={post.thumbnail} alt="thumb" className="w-16 h-16 md:w-20 md:h-20 object-cover rounded-md mr-3 md:mr-4 shrink-0 bg-stone-200 dark:bg-stone-800" />;
+      return (
+        <div className="relative w-16 h-16 md:w-20 md:h-20 mr-3 md:mr-4 shrink-0 group">
+          <img 
+            src={post.thumbnail} 
+            alt="thumb" 
+            className="w-full h-full object-cover rounded-md bg-stone-200 dark:bg-stone-800" 
+          />
+          {isVideo && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-md group-hover:bg-black/40 transition-colors">
+               <PlayCircle size={24} className="text-white drop-shadow-md" fill="rgba(0,0,0,0.3)" />
+            </div>
+          )}
+        </div>
+      );
     }
-    return <div className="w-16 h-16 md:w-20 md:h-20 bg-stone-200 dark:bg-stone-800 rounded-md mr-3 md:mr-4 flex items-center justify-center shrink-0 text-stone-400 dark:text-stone-600"><ImageIcon size={24} /></div>;
+    
+    // Case 2: No thumbnail, check if video for icon
+    if (isVideo) {
+         return (
+            <div className="w-16 h-16 md:w-20 md:h-20 bg-stone-200 dark:bg-stone-800 rounded-md mr-3 md:mr-4 flex items-center justify-center shrink-0 text-stone-500 dark:text-stone-400 border border-stone-300 dark:border-stone-700">
+                <PlayCircle size={28} />
+            </div>
+         );
+    }
+
+    // Case 3: Default Image icon
+    return (
+        <div className="w-16 h-16 md:w-20 md:h-20 bg-stone-200 dark:bg-stone-800 rounded-md mr-3 md:mr-4 flex items-center justify-center shrink-0 text-stone-400 dark:text-stone-600">
+            <ImageIcon size={24} />
+        </div>
+    );
   };
 
   return (

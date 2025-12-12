@@ -67,6 +67,14 @@
       ::-webkit-scrollbar-thumb:hover {
         background: #78716c; 
       }
+      
+      @keyframes progress-indeterminate {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(300%); }
+      }
+      .animate-progress-indeterminate {
+        animation: progress-indeterminate 1.5s infinite cubic-bezier(0.4, 0.0, 0.2, 1);
+      }
     </style>
   <script type="importmap">
 {

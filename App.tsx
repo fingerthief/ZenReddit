@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar';
 import PostCard from './components/PostCard';
 import PostDetail from './components/PostDetail';
 import SettingsModal from './components/SettingsModal';
+import ScanningVisualizer from './components/ScanningVisualizer';
 import { FeedType, FilteredPost, RedditPostData, AIConfig } from './types';
 import { fetchFeed } from './services/redditService';
 import { analyzePostsForZen } from './services/geminiService';
@@ -23,7 +24,8 @@ const App: React.FC = () => {
   // --- State Initialization (Lazy loading from LocalStorage) ---
   
   // Navigation State
-  const [currentFeed, setCurrentFeed] = useState<FeedType>(() => loadFromStorage('zen_last_feed', 'home'));
+  // Default to 'all' (Popular) instead of 'home'
+  const [currentFeed, setCurrentFeed] = useState<FeedType>(() => loadFromStorage('zen_last_feed', 'all'));
   const [currentSub, setCurrentSub] = useState<string | undefined>(() => loadFromStorage('zen_last_sub', undefined));
   
   // Data State
@@ -34,12 +36,9 @@ const App: React.FC = () => {
   const [after, setAfter] = useState<string | null>(null);
 
   // User Preferences State
+  // Removed default subscriptions logic
   const [followedSubs, setFollowedSubs] = useState<string[]>(() => {
-    const saved = loadFromStorage<string[]>('zen_followed_subs', []);
-    if (saved.length === 0) {
-        return ['CozyPlaces', 'MadeMeSmile', 'wholesomememes', 'nature'];
-    }
-    return saved;
+    return loadFromStorage<string[]>('zen_followed_subs', []);
   });
 
   const [blockedCount, setBlockedCount] = useState(() => loadFromStorage<number>('zen_blocked_count', 0));
@@ -311,12 +310,18 @@ const App: React.FC = () => {
 
         {/* Feed */}
         <div className="space-y-4">
+            {/* Show skeleton loader while fetching initial data from Reddit */}
             {loading && posts.length === 0 && (
                 <div className="space-y-4 animate-pulse">
                     {[1, 2, 3].map(i => (
                         <div key={i} className="h-48 bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-800"></div>
                     ))}
                 </div>
+            )}
+
+            {/* Show visualizer while AI analyzes initial batch */}
+            {analyzing && posts.length === 0 && (
+                <ScanningVisualizer />
             )}
 
             {!loading && posts.length === 0 && !analyzing && (
