@@ -72,7 +72,7 @@ export interface SubredditSubscription {
 }
 
 // AI Configuration Types
-export type AIProvider = 'gemini' | 'openrouter';
+export type AIProvider = 'openrouter';
 
 export interface AIConfig {
   provider: AIProvider;

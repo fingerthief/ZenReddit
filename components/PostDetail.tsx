@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { FilteredPost, RedditComment } from '../types';
 import { fetchComments } from '../services/redditService';
-import { X, ExternalLink, Loader2, ArrowBigUp } from 'lucide-react';
+import { X, ExternalLink, Loader2, ArrowBigUp, ChevronLeft } from 'lucide-react';
 
 interface PostDetailProps {
   post: FilteredPost;
@@ -22,7 +22,8 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose }) => {
     loadComments();
   }, [post.permalink]);
 
-  const decodeHtml = (html: string) => {
+  const decodeHtml = (html: string | undefined | null) => {
+    if (!html) return "";
     const txt = document.createElement("textarea");
     txt.innerHTML = html;
     return txt.value;
@@ -60,22 +61,28 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-0 md:p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-white md:bg-black/50 md:backdrop-blur-sm p-0 md:p-4">
       <div className="bg-white dark:bg-stone-900 w-full md:max-w-4xl h-full md:h-[90vh] md:rounded-2xl shadow-2xl flex flex-col overflow-hidden border-none md:border border-stone-200 dark:border-stone-700">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900 shrink-0">
-          <div className="flex items-center space-x-2 text-sm text-stone-500 dark:text-stone-400 overflow-hidden">
-             <span className="font-bold text-stone-800 dark:text-stone-200 truncate">r/{post.subreddit}</span>
-             <span>•</span>
-             <span className="truncate">u/{post.author}</span>
+        <div className="flex items-center justify-between p-3 md:p-4 border-b border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900 shrink-0 sticky top-0 z-10">
+          <div className="flex items-center gap-2 md:gap-4 overflow-hidden">
+             <button onClick={onClose} className="p-2 -ml-2 hover:bg-stone-200 dark:hover:bg-stone-800 rounded-full transition-colors shrink-0 md:hidden">
+                <ChevronLeft size={24} className="text-stone-800 dark:text-stone-200" />
+             </button>
+             
+             <div className="flex flex-col min-w-0">
+                 <span className="font-bold text-stone-800 dark:text-stone-200 truncate text-sm md:text-base">r/{post.subreddit}</span>
+                 <span className="text-xs text-stone-500 dark:text-stone-400 truncate">u/{post.author}</span>
+             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-stone-200 dark:hover:bg-stone-800 rounded-full transition-colors shrink-0">
+
+          <button onClick={onClose} className="hidden md:block p-2 hover:bg-stone-200 dark:hover:bg-stone-800 rounded-full transition-colors shrink-0">
             <X size={20} className="text-stone-600 dark:text-stone-400" />
           </button>
         </div>
 
         {/* Content - Scrollable */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white dark:bg-stone-950">
           <h2 className="text-xl md:text-2xl font-semibold text-stone-900 dark:text-stone-100 mb-4 leading-tight">{decodeHtml(post.title)}</h2>
           
           {renderMedia()}
@@ -97,7 +104,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose }) => {
           ) : (
             <div className="space-y-4">
               {comments.map((comment) => (
-                <div key={comment.data.id} className="bg-stone-50 dark:bg-stone-800 p-3 rounded-lg">
+                <div key={comment.data.id} className="bg-stone-50 dark:bg-stone-900/50 border border-stone-100 dark:border-stone-800 p-3 rounded-lg">
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-semibold text-xs text-stone-600 dark:text-stone-400">{comment.data.author}</span>
                     <div className="flex items-center text-xs text-stone-400">
@@ -105,7 +112,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose }) => {
                         {comment.data.score}
                     </div>
                   </div>
-                  <div className="text-sm text-stone-800 dark:text-stone-200 prose prose-sm dark:prose-invert max-w-none">
+                  <div className="text-sm text-stone-800 dark:text-stone-200 prose prose-sm dark:prose-invert max-w-none break-words">
                      {decodeHtml(comment.data.body)}
                   </div>
                 </div>

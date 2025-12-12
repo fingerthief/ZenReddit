@@ -1,24 +1,25 @@
 {
-  "name": "zenreddit",
-  "private": true,
-  "version": "0.0.0",
+  "name": "zen-reddit",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "lucide-react": "^0.560.0",
-    "react-dom": "^19.2.3",
-    "react": "^19.2.3",
     "@google/genai": "^1.33.0",
-    "date-fns": "^4.1.0"
+    "date-fns": "^4.1.0",
+    "lucide-react": "^0.560.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
   },
   "devDependencies": {
-    "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "@types/node": "^20.11.24",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.1.0"
   }
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { FilteredPost } from '../types';
-import { MessageSquare, ArrowBigUp, Image as ImageIcon, PlayCircle } from 'lucide-react';
+import { MessageSquare, ArrowBigUp, Image as ImageIcon, CirclePlay } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface PostCardProps {
@@ -32,7 +32,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
           />
           {isVideo && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-md group-hover:bg-black/40 transition-colors">
-               <PlayCircle size={24} className="text-white drop-shadow-md" fill="rgba(0,0,0,0.3)" />
+               <CirclePlay size={24} className="text-white drop-shadow-md" fill="rgba(0,0,0,0.3)" />
             </div>
           )}
         </div>
@@ -43,7 +43,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
     if (isVideo) {
          return (
             <div className="w-16 h-16 md:w-20 md:h-20 bg-stone-200 dark:bg-stone-800 rounded-md mr-3 md:mr-4 flex items-center justify-center shrink-0 text-stone-500 dark:text-stone-400 border border-stone-300 dark:border-stone-700">
-                <PlayCircle size={28} />
+                <CirclePlay size={28} />
             </div>
          );
     }

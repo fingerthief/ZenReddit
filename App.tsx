@@ -7,7 +7,7 @@ import ScanningVisualizer from './components/ScanningVisualizer';
 import { FeedType, FilteredPost, RedditPostData, AIConfig } from './types';
 import { fetchFeed } from './services/redditService';
 import { analyzePostsForZen } from './services/geminiService';
-import { Loader2, RefreshCw, Menu, Moon, Sun, X, Settings } from 'lucide-react';
+import { Loader2, RefreshCw, Menu, Moon, Sun, X, Settings, TriangleAlert } from 'lucide-react';
 
 // Helper to safely load from local storage
 const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
@@ -50,7 +50,7 @@ const App: React.FC = () => {
   });
 
   const [aiConfig, setAiConfig] = useState<AIConfig>(() => ({
-    provider: 'gemini',
+    provider: 'openrouter',
     minZenScore: 50,
     ...loadFromStorage('zen_ai_config', {})
   }));
@@ -97,6 +97,22 @@ const App: React.FC = () => {
     localStorage.setItem('zen_ai_config', JSON.stringify(aiConfig));
   }, [aiConfig]);
 
+  // Handle Browser Back Button for Modal
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      // If the user presses back and we have a post open, close it.
+      // We rely on the fact that opening a post pushed a state.
+      // If we are here, we popped that state.
+      if (selectedPost) {
+        setSelectedPost(null);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [selectedPost]);
+
+
   // --- Handlers ---
 
   const toggleTheme = () => {
@@ -116,6 +132,32 @@ const App: React.FC = () => {
   const handleSaveSettings = (config: AIConfig) => {
       setAiConfig(config);
       // Logic handled by effect now
+  };
+
+  const handlePostClick = (post: FilteredPost) => {
+      // Push state so back button works on mobile
+      try {
+        // Use null for URL to avoid security errors in blob/iframe contexts
+        window.history.pushState({ postOpen: true }, '', null);
+      } catch (e) {
+        console.debug("History pushState failed (expected in some preview environments)", e);
+      }
+      setSelectedPost(post);
+  };
+
+  const handlePostClose = () => {
+      // If we are closing via UI button, we should go back to pop the history state
+      // This prevents the user from having to click back twice later.
+      if (window.history.state?.postOpen) {
+          try {
+            window.history.back();
+          } catch(e) {
+             // Fallback if history.back fails
+             setSelectedPost(null);
+          }
+      } else {
+          setSelectedPost(null);
+      }
   };
 
   // --- Main Data Fetching Logic ---
@@ -197,6 +239,16 @@ const App: React.FC = () => {
     loadPosts(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentFeed, currentSub]); 
+
+  // Reload Home feed if subscriptions change while we are on Home
+  useEffect(() => {
+    if (currentFeed === 'home') {
+        setPosts([]);
+        setAfter(null);
+        loadPosts(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [followedSubs]); // Only re-run if followedSubs changes
   
   // Infinite Scroll Observer
   useEffect(() => {
@@ -286,6 +338,28 @@ const App: React.FC = () => {
 
       {/* Main Content */}
       <main className="flex-1 p-4 md:p-8 pt-20 md:pt-8 max-w-4xl mx-auto w-full">
+        
+        {/* Missing API Key Warning */}
+        {!aiConfig.openRouterKey && (
+            <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-start gap-4 shadow-sm animate-in slide-in-from-top-2 fade-in">
+                <div className="p-2 bg-amber-100 dark:bg-amber-800/50 rounded-lg text-amber-600 dark:text-amber-400 shrink-0">
+                    <TriangleAlert size={24} />
+                </div>
+                <div className="flex-1">
+                    <h3 className="font-semibold text-amber-900 dark:text-amber-100">AI Not Configured</h3>
+                    <p className="text-sm text-amber-700 dark:text-amber-300 mt-1 mb-3">
+                        ZenReddit requires an OpenRouter API key to filter content. Without it, posts won't be analyzed for rage-bait.
+                    </p>
+                    <button 
+                        onClick={() => setSettingsOpen(true)}
+                        className="text-sm font-medium bg-amber-100 dark:bg-amber-800 text-amber-800 dark:text-amber-200 px-4 py-2 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-700 transition-colors"
+                    >
+                        Add API Key
+                    </button>
+                </div>
+            </div>
+        )}
+
         {/* Header Area */}
         <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
@@ -328,6 +402,11 @@ const App: React.FC = () => {
                 <div className="text-center py-20 text-stone-400 dark:text-stone-500">
                     <p>No zen content found right now.</p>
                     {currentFeed === 'home' && <p className="text-sm mt-2">Try following more subreddits.</p>}
+                    {!aiConfig.openRouterKey && (
+                        <p className="text-sm mt-4 text-emerald-600 dark:text-emerald-400 cursor-pointer" onClick={() => setSettingsOpen(true)}>
+                            Open Settings to add your OpenRouter Key
+                        </p>
+                    )}
                 </div>
             )}
 
@@ -335,7 +414,7 @@ const App: React.FC = () => {
                 <PostCard 
                     key={post.id} 
                     post={post} 
-                    onClick={setSelectedPost} 
+                    onClick={handlePostClick} 
                 />
             ))}
 
@@ -357,7 +436,7 @@ const App: React.FC = () => {
       {selectedPost && (
         <PostDetail 
             post={selectedPost} 
-            onClose={() => setSelectedPost(null)} 
+            onClose={handlePostClose} 
         />
       )}
 

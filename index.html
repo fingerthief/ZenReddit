@@ -3,7 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#10b981" />
+    <meta name="description" content="A peaceful Reddit client that uses AI to filter out rage-bait and divisive content.">
     <title>ZenReddit</title>
+    
+    <!-- PWA Links -->
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/svg+xml" href="/icon.svg">
+    <link rel="apple-touch-icon" href="/icon.svg">
+
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script>
       tailwind.config = {
@@ -76,14 +84,16 @@
         animation: progress-indeterminate 1.5s infinite cubic-bezier(0.4, 0.0, 0.2, 1);
       }
     </style>
-  <script type="importmap">
+<script type="importmap">
 {
   "imports": {
-    "lucide-react": "https://esm.sh/lucide-react@^0.560.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.33.0",
     "react/": "https://esm.sh/react@^19.2.3/",
     "react": "https://esm.sh/react@^19.2.3",
-    "@google/genai": "https://esm.sh/@google/genai@^1.33.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.561.0",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "vite": "https://esm.sh/vite@^7.2.7",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "date-fns": "https://esm.sh/date-fns@^4.1.0"
   }
 }
@@ -91,6 +101,19 @@
 </head>
   <body>
     <div id="root"></div>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              console.debug('ServiceWorker registration successful');
+            })
+            .catch((err) => {
+              console.debug('ServiceWorker registration failed: ', err);
+            });
+        });
+      }
+    </script>
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>

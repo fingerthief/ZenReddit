@@ -1,0 +1,11 @@
+version: '3.8'
+services:
+  zen-reddit:
+    build:
+      context: .
+      args:
+        - API_KEY=${API_KEY}
+    ports:
+      - "80:80"
+    environment:
+      - API_KEY=${API_KEY}

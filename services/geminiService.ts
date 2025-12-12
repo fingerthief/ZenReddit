@@ -1,10 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import { RedditPostData, AIConfig } from "../types";
-
-// Initialize Gemini Client
-// We assume process.env.API_KEY is available as per instructions.
-// This is used ONLY when provider is 'gemini'
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export interface AnalysisResult {
   id: string;
@@ -44,58 +38,16 @@ export const analyzePostsForZen = async (posts: RedditPostData[], config?: AICon
     - Provide a very short "reason" (max 10 words).
   `;
 
-  // Default to Gemini if no config provided or provider is gemini
-  if (!config || config.provider === 'gemini') {
-    return analyzeWithGemini(postsPayload, systemPrompt);
-  } else {
-    return analyzeWithOpenRouter(postsPayload, systemPrompt, config);
+  if (!config || !config.openRouterKey) {
+      console.warn("OpenRouter key is missing in configuration.");
+      return fallbackResult(postsPayload);
   }
-};
 
-const analyzeWithGemini = async (postsPayload: any[], systemPrompt: string): Promise<AnalysisResult[]> => {
-  const prompt = `
-    ${systemPrompt}
-
-    Input Data:
-    ${JSON.stringify(postsPayload)}
-  `;
-
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              id: { type: Type.STRING },
-              isRageBait: { type: Type.BOOLEAN },
-              zenScore: { type: Type.NUMBER },
-              reason: { type: Type.STRING }
-            },
-            required: ["id", "isRageBait", "zenScore", "reason"]
-          }
-        }
-      }
-    });
-
-    const jsonText = response.text;
-    if (!jsonText) return [];
-
-    return JSON.parse(jsonText) as AnalysisResult[];
-
-  } catch (error) {
-    console.error("Gemini Analysis Failed:", error);
-    return fallbackResult(postsPayload);
-  }
+  return analyzeWithOpenRouter(postsPayload, systemPrompt, config);
 };
 
 const analyzeWithOpenRouter = async (postsPayload: any[], systemPrompt: string, config: AIConfig): Promise<AnalysisResult[]> => {
     if (!config.openRouterKey) {
-        console.warn("OpenRouter selected but no key provided");
         return fallbackResult(postsPayload);
     }
 
