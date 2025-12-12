@@ -1,0 +1,72 @@
+// Reddit API Types
+
+export interface RedditPostData {
+  id: string;
+  title: string;
+  selftext: string;
+  author: string;
+  subreddit: string;
+  subreddit_name_prefixed: string;
+  score: number;
+  num_comments: number;
+  permalink: string;
+  created_utc: number;
+  url: string;
+  thumbnail: string;
+  preview?: {
+    images: {
+      source: { url: string; width: number; height: number };
+      resolutions: { url: string; width: number; height: number }[];
+    }[];
+  };
+  is_video: boolean;
+  secure_media?: {
+    reddit_video?: {
+      fallback_url: string;
+    };
+  };
+  is_gallery?: boolean;
+  media_metadata?: Record<string, any>;
+}
+
+export interface RedditPost {
+  kind: 't3';
+  data: RedditPostData;
+}
+
+export interface RedditListing {
+  kind: 'Listing';
+  data: {
+    after: string | null;
+    children: RedditPost[];
+  };
+}
+
+export interface RedditCommentData {
+  id: string;
+  author: string;
+  body: string;
+  score: number;
+  created_utc: number;
+  replies?: RedditListing | ""; // Reddit API returns empty string for no replies sometimes
+}
+
+export interface RedditComment {
+  kind: 't1';
+  data: RedditCommentData;
+}
+
+// App State Types
+
+export interface FilteredPost extends RedditPostData {
+  isRageBait?: boolean;
+  zenReason?: string;
+  zenScore?: number; // 0-100, where 100 is pure zen, 0 is pure rage
+}
+
+export type FeedType = 'home' | 'all' | 'subreddit';
+
+export interface SubredditSubscription {
+  name: string;
+  icon?: string;
+}

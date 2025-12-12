@@ -1,0 +1,5 @@
+{
+  "name": "ZenReddit",
+  "description": "A peaceful Reddit client that uses AI to filter out rage-bait and divisive content, ensuring a zen browsing experience.",
+  "requestFramePermissions": []
+}
