@@ -1,6 +1,3 @@
-
-
-
 // Reddit API Types
 
 export interface RedditPostData {
@@ -79,6 +76,7 @@ export interface RedditCommentData {
   score: number;
   created_utc: number;
   replies?: RedditListing | ""; // Reddit API returns empty string for no replies sometimes
+  permalink?: string;
 }
 
 export interface RedditComment {
@@ -113,6 +111,7 @@ export interface AIConfig {
   openRouterKey?: string;
   openRouterModel?: string;
   minZenScore?: number; // 0-100, threshold for filtering
+  customInstructions?: string;
 }
 
 export interface CachedAnalysis {

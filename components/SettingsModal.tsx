@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, CircleAlert, Loader2, Shield, Key, Check, Search } from 'lucide-react';
+import { X, Save, CircleAlert, Loader2, Shield, Key, Check, Search, Sparkles } from 'lucide-react';
 import { AIConfig, AIProvider } from '../types';
 
 interface SettingsModalProps {
@@ -14,6 +15,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
   const [openRouterKey, setOpenRouterKey] = useState('');
   const [openRouterModel, setOpenRouterModel] = useState('google/gemini-2.0-flash-lite-preview-02-05:free');
   const [minZenScore, setMinZenScore] = useState(50);
+  const [customInstructions, setCustomInstructions] = useState('');
   
   // New state for models
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
@@ -28,6 +30,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
       setOpenRouterKey(config.openRouterKey || '');
       setOpenRouterModel(config.openRouterModel || 'google/gemini-2.0-flash-lite-preview-02-05:free');
       setMinZenScore(config.minZenScore ?? 50);
+      setCustomInstructions(config.customInstructions || '');
     }
   }, [isOpen, config]);
 
@@ -82,6 +85,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
       openRouterKey: openRouterKey,
       openRouterModel: openRouterModel,
       minZenScore,
+      customInstructions
     });
     onClose();
   };
@@ -140,6 +144,25 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
                     {minZenScore < 40 && "Only extreme rage bait will be blocked. Mild annoyances will pass through."}
                     {minZenScore >= 40 && minZenScore <= 60 && "Standard filtering. Blocks obviously divisive content and anger-inducing posts."}
                     {minZenScore > 60 && "High purity. Filters out anything even slightly controversial or non-constructive."}
+                </p>
+            </div>
+
+            <div className="border-t border-stone-100 dark:border-stone-800"></div>
+
+            {/* Custom Instructions Section */}
+            <div>
+                 <label className="flex items-center gap-2 text-sm font-medium text-stone-700 dark:text-stone-300 mb-2">
+                    <Sparkles size={16} />
+                    Custom Instructions
+                </label>
+                <textarea
+                    value={customInstructions}
+                    onChange={(e) => setCustomInstructions(e.target.value)}
+                    placeholder="e.g. I dislike politics, I love cats, Filter out spoilers..."
+                    className="w-full h-24 bg-white dark:bg-stone-950 border border-stone-200 dark:border-stone-700 rounded-lg px-3 py-2 text-sm text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none"
+                />
+                <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
+                    These instructions will be passed to the AI to tailor your feed.
                 </p>
             </div>
 

@@ -16,7 +16,7 @@ interface PostDetailProps {
 // Helper to extract image URLs from text
 const extractMediaFromText = (text: string) => {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
-  const urls = text.match(urlRegex) || [];
+  const urls: string[] = text.match(urlRegex) || [];
   
   return urls.filter(url => {
     // Clean URL (remove markdown parenthesis if present at end)
@@ -197,7 +197,8 @@ const CommentNode: React.FC<{ comment: RedditComment; depth?: number; onNavigate
 
   // Extract replies safely
   const replies = useMemo(() => {
-      return (data.replies && data.replies !== "" && data.replies.data) ? data.replies.data.children : [];
+      // Check if replies is an object (RedditListing) and not an empty string
+      return (data.replies && typeof data.replies !== 'string' && data.replies.data) ? data.replies.data.children : [];
   }, [data.replies]);
   
   const hasReplies = replies.length > 0;
@@ -280,7 +281,7 @@ const CommentNode: React.FC<{ comment: RedditComment; depth?: number; onNavigate
                                 return (
                                     <div key={child.data.id} className="mt-2 ml-4 text-xs text-stone-400 italic pl-3 border-l-2 border-transparent">
                                         <a 
-                                            href={`https://reddit.com${comment.data.permalink}${child.data.id}`} 
+                                            href={`https://reddit.com${comment.data.permalink || ''}${child.data.id}`} 
                                             target="_blank" 
                                             rel="noreferrer" 
                                             className="hover:underline flex items-center gap-1"
@@ -400,7 +401,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub })
                 src,
                 caption: item.caption
             };
-        }).filter((i): i is { id: number; src: string; caption?: string | undefined; } => i !== null);
+        }).filter((i): i is { id: number; src: string; caption: string | undefined; } => i !== null);
 
         if (galleryItems.length > 0) {
             return <GalleryViewer items={galleryItems} />;

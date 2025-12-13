@@ -1,3 +1,4 @@
+
 import { RedditPostData, AIConfig } from "../types";
 
 export interface AnalysisResult {
@@ -24,6 +25,8 @@ export const analyzePostsForZen = async (posts: RedditPostData[], config?: AICon
     Analyze the following Reddit posts to curate a "Zen" feed. 
     Your goal is to strictly filter out rage bait, intentionally divisive politics, aggressive arguments, and content designed to induce anxiety or anger.
     
+    ${config?.customInstructions ? `USER CUSTOM PREFERENCES (IMPORTANT): "${config.customInstructions}". Adjust your scoring and reasoning based on these preferences.` : ""}
+
     Context & Heuristics:
     1. **Subreddit Reputation**: Consider the subreddit. Hobby, nature, and support subs (e.g., r/woodworking, r/aww) usually have high Zen scores. Controversial, political, or drama-focused subs (e.g., r/politics, r/PublicFreakout) should be scrutinized heavily and likely marked as rage bait unless exceptionally positive.
     2. **Content Tone**: Analyze the title and body snippet. Look for aggressive language, "us vs them" rhetoric, or clickbait designed to provoke outrage.
