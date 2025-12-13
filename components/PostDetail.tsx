@@ -15,18 +15,29 @@ interface PostDetailProps {
   textSize: 'small' | 'medium' | 'large';
 }
 
-// Helper to extract image URLs from text
+// Helper to extract image/video URLs from text
 const extractMediaFromText = (text: string) => {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const urls: string[] = text.match(urlRegex) || [];
   
-  return urls.filter(url => {
-    // Clean URL (remove markdown parenthesis if present at end)
-    const cleanUrl = url.replace(/[)]$/, '');
-    return cleanUrl.match(/\.(jpeg|jpg|png|gif|webp)$/i) || 
-           cleanUrl.includes('giphy.com/media') ||
-           cleanUrl.includes('i.imgur.com');
-  }).map(url => url.replace(/[)]$/, '')); // Return cleaned URLs
+  return urls.map(url => {
+    // Clean URL (remove markdown parenthesis/brackets if present at end)
+    return url.replace(/[)\]]+$/, '');
+  }).filter(url => {
+    const lowerUrl = url.toLowerCase();
+    // Remove query params for extension check
+    const urlNoParams = lowerUrl.split('?')[0];
+    
+    // Allowed extensions
+    const hasMediaExt = urlNoParams.match(/\.(jpeg|jpg|png|gif|webp|bmp|mp4|webm|mov)$/);
+    
+    // Allowed domains
+    const isReddit = lowerUrl.includes('preview.redd.it') || lowerUrl.includes('i.redd.it');
+    const isGiphy = lowerUrl.includes('giphy.com/media');
+    const isImgur = lowerUrl.includes('i.imgur.com');
+
+    return hasMediaExt || isReddit || isGiphy || isImgur;
+  });
 };
 
 // Markdown Renderer Component
@@ -264,16 +275,30 @@ const CommentNode: React.FC<{ comment: RedditComment; depth?: number; onNavigate
                 {/* Inline Media */}
                 {mediaUrls.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2 pl-1">
-                        {mediaUrls.map((url, idx) => (
-                            <div key={idx} className="relative rounded-lg overflow-hidden bg-stone-100 dark:bg-stone-900 border border-stone-200 dark:border-stone-700 max-w-full md:max-w-md">
-                                <img 
-                                    src={url} 
-                                    alt="Comment media" 
-                                    className="max-h-60 object-contain w-auto"
-                                    loading="lazy"
-                                />
-                            </div>
-                        ))}
+                        {mediaUrls.map((url, idx) => {
+                            // Basic heuristic for video vs image
+                            const isVideo = url.match(/\.(mp4|webm|mov)(\?|$)/i);
+                            
+                            return (
+                                <div key={idx} className="relative rounded-lg overflow-hidden bg-stone-100 dark:bg-stone-900 border border-stone-200 dark:border-stone-700 max-w-full md:max-w-md">
+                                    {isVideo ? (
+                                        <video 
+                                            src={url} 
+                                            controls 
+                                            preload="metadata"
+                                            className="max-h-60 w-auto bg-black"
+                                        />
+                                    ) : (
+                                        <img 
+                                            src={url.replace(/&amp;/g, '&')} 
+                                            alt="Comment media" 
+                                            className="max-h-60 object-contain w-auto"
+                                            loading="lazy"
+                                        />
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
 
