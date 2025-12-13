@@ -204,10 +204,17 @@ const GalleryViewer: React.FC<{ items: { src: string; caption?: string; id: stri
   );
 };
 
-const CommentNode: React.FC<{ comment: RedditComment; depth?: number; onNavigateSub?: (sub: string) => void; textSize: 'small' | 'medium' | 'large' }> = memo(({ comment, depth = 0, onNavigateSub, textSize }) => {
+const CommentNode: React.FC<{ 
+    comment: RedditComment; 
+    depth?: number; 
+    onNavigateSub?: (sub: string) => void; 
+    textSize: 'small' | 'medium' | 'large';
+    opAuthor: string;
+}> = memo(({ comment, depth = 0, onNavigateSub, textSize, opAuthor }) => {
   const [collapsed, setCollapsed] = useState(false);
   const [visibleReplies, setVisibleReplies] = useState(3); // Start with 3
   const data = comment.data;
+  const isOp = data.author === opAuthor;
   
   // Skip if deleted
   if (data.author === '[deleted]') return null;
@@ -248,9 +255,18 @@ const CommentNode: React.FC<{ comment: RedditComment; depth?: number; onNavigate
             <div className="text-stone-400 group-hover:text-stone-600 dark:group-hover:text-stone-300 transition-colors">
                 {collapsed ? <PlusSquare size={12} /> : <MinusSquare size={12} />}
             </div>
-            <span className={`font-semibold text-stone-700 dark:text-stone-300 ${data.author === 'AutoModerator' ? 'text-green-600 dark:text-green-500' : ''}`}>
+            <span className={`font-semibold ${
+                data.author === 'AutoModerator' ? 'text-green-600 dark:text-green-500' : 
+                isOp ? 'text-blue-600 dark:text-blue-400' : 
+                'text-stone-700 dark:text-stone-300'
+            }`}>
                 {data.author}
             </span>
+            {isOp && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 leading-none">
+                    OP
+                </span>
+            )}
             <span className="text-[10px]">•</span>
             <span>{formatDistanceToNow(new Date(data.created_utc * 1000))} ago</span>
             <span className="text-[10px]">•</span>
@@ -268,7 +284,7 @@ const CommentNode: React.FC<{ comment: RedditComment; depth?: number; onNavigate
         {!collapsed && (
             <>
                 {/* Comment Body with Markdown */}
-                <div className="pl-1">
+                <div className={`pl-1 ${isOp ? 'border-l-2 border-blue-100 dark:border-blue-900/30 pl-2 -ml-1' : ''}`}>
                     <MarkdownRenderer content={data.body} onNavigateSub={onNavigateSub} textSize={textSize} />
                 </div>
 
@@ -307,7 +323,7 @@ const CommentNode: React.FC<{ comment: RedditComment; depth?: number; onNavigate
                     <div className="mt-1">
                         {replies.slice(0, visibleReplies).map((child) => {
                             if (child.kind === 't1') {
-                                return <CommentNode key={child.data.id} comment={child as RedditComment} depth={depth + 1} onNavigateSub={onNavigateSub} textSize={textSize} />;
+                                return <CommentNode key={child.data.id} comment={child as RedditComment} depth={depth + 1} onNavigateSub={onNavigateSub} textSize={textSize} opAuthor={opAuthor} />;
                             }
                             if (child.kind === 'more') {
                                 // 'more' objects handling
@@ -544,7 +560,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
           ) : (
             <div className="space-y-4 pb-12">
               {comments.map((comment) => (
-                <CommentNode key={comment.data.id} comment={comment} onNavigateSub={onNavigateSub} textSize={textSize} />
+                <CommentNode key={comment.data.id} comment={comment} onNavigateSub={onNavigateSub} textSize={textSize} opAuthor={post.author} />
               ))}
               {comments.length === 0 && (
                 <p className="text-stone-400 italic text-center">No comments found.</p>

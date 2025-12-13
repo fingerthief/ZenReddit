@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { FilteredPost } from '../types';
 import { MessageSquare, ArrowBigUp, Image as ImageIcon, CirclePlay } from 'lucide-react';
@@ -8,22 +9,45 @@ interface PostCardProps {
   isSeen?: boolean;
   onClick: (post: FilteredPost) => void;
   onNavigateSub?: (sub: string) => void;
+  onImageClick?: (url: string) => void;
 }
 
-const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNavigateSub }) => {
+const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNavigateSub, onImageClick }) => {
   const decodeHtml = (html: string) => {
     const txt = document.createElement("textarea");
     txt.innerHTML = html;
     return txt.value;
   };
 
+  const handleThumbnailClick = (e: React.MouseEvent) => {
+      const isVideo = post.is_video || 
+                      !!post.secure_media?.reddit_video || 
+                      !!post.preview?.reddit_video_preview ||
+                      (post.url && !!post.url.match(/\.(mp4|gifv|webm|mkv|mov)$/i)) ||
+                      post.domain === 'v.redd.it';
+
+      // If it's a video, let the click bubble up to open PostDetail (which has the video player)
+      if (isVideo) return;
+
+      // Logic to find best resolution image
+      let imageUrl = post.url;
+      if (post.preview?.images?.[0]?.source?.url) {
+          imageUrl = post.preview.images[0].source.url.replace(/&amp;/g, '&');
+      }
+
+      // Check if it's likely an image we can display
+      const isImage = imageUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) || 
+                      post.domain?.includes('i.redd.it') || 
+                      (post.domain?.includes('imgur.com') && !post.url.includes('/a/')); // Skip imgur albums
+
+      if (onImageClick && isImage) {
+          e.stopPropagation();
+          onImageClick(imageUrl);
+      }
+  };
+
   const getThumbnail = () => {
     // Robust video detection:
-    // 1. Explicit is_video flag
-    // 2. Has secure_media.reddit_video
-    // 3. Has a preview that indicates video/gif
-    // 4. URL extension match (mp4, gifv, etc)
-    // 5. Specific video domains (v.redd.it)
     const isVideo = post.is_video || 
                     !!post.secure_media?.reddit_video || 
                     !!post.preview?.reddit_video_preview ||
@@ -35,7 +59,10 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
     // Case 1: Has a valid image thumbnail
     if (post.thumbnail && post.thumbnail.startsWith('http')) {
       return (
-        <div className={`relative w-16 h-16 md:w-20 md:h-20 mr-3 md:mr-4 shrink-0 group rounded-md overflow-hidden bg-stone-200 dark:bg-stone-800 ${opacityClass}`}>
+        <div 
+            onClick={handleThumbnailClick}
+            className={`relative w-16 h-16 md:w-20 md:h-20 mr-3 md:mr-4 shrink-0 group rounded-md overflow-hidden bg-stone-200 dark:bg-stone-800 ${opacityClass}`}
+        >
           <img 
             src={post.thumbnail} 
             alt="thumb" 

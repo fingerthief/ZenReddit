@@ -3,12 +3,13 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import PostCard from './components/PostCard';
 import PostDetail from './components/PostDetail';
+import ImageViewer from './components/ImageViewer';
 import SettingsModal from './components/SettingsModal';
 import ScanningVisualizer from './components/ScanningVisualizer';
 import { FeedType, FilteredPost, RedditPostData, AIConfig, SortOption, TopTimeOption, CachedAnalysis } from './types';
 import { fetchFeed } from './services/redditService';
-import { analyzePostsForZen } from './services/geminiService';
-import { Loader2, RefreshCw, Menu, Moon, Sun, X, Settings, TriangleAlert, CloudOff, Search, Heart, Check, Flame, Clock, TrendingUp, Trophy } from 'lucide-react';
+import { analyzePostsForZen, AnalysisResult } from './services/geminiService';
+import { Loader2, RefreshCw, Menu, CloudOff, TriangleAlert } from 'lucide-react';
 
 // Helper to safely load from local storage
 const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
@@ -47,8 +48,6 @@ const PostSkeleton = () => (
 );
 
 const App: React.FC = () => {
-  // --- State Initialization (Lazy loading from LocalStorage) ---
-  
   // Navigation State
   const [currentFeed, setCurrentFeed] = useState<FeedType>(() => {
     const saved = loadFromStorage('zen_last_feed', 'popular');
@@ -59,6 +58,7 @@ const App: React.FC = () => {
   });
   const [currentSub, setCurrentSub] = useState<string | undefined>(() => loadFromStorage('zen_last_sub', undefined));
   const [currentSearchQuery, setCurrentSearchQuery] = useState<string>(() => loadFromStorage('zen_last_search', ''));
+  const [navHistory, setNavHistory] = useState<{feed: FeedType, sub?: string, query?: string}[]>([]);
   
   // Sorting State
   const [currentSort, setCurrentSort] = useState<SortOption>(() => loadFromStorage<SortOption>('zen_sort', 'hot'));
@@ -76,14 +76,12 @@ const App: React.FC = () => {
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedPost, setSelectedPost] = useState<FilteredPost | null>(null);
+  const [viewingImage, setViewingImage] = useState<string | null>(null);
   const [after, setAfter] = useState<string | null>(null);
   
   // Cache State
   const [analysisCache, setAnalysisCache] = useState<Record<string, CachedAnalysis>>(() => loadFromStorage<Record<string, CachedAnalysis>>('zen_analysis_cache', {}));
   
-  // UI State - Input
-  const [searchInput, setSearchInput] = useState('');
-
   // User Preferences State
   const [followedSubs, setFollowedSubs] = useState<string[]>(() => {
     return loadFromStorage<string[]>('zen_followed_subs', []);
@@ -102,7 +100,6 @@ const App: React.FC = () => {
       const cleaned: Record<string, number> = {};
       let hasChanges = false;
       
-      // Filter out posts older than 72 hours
       Object.entries(parsed).forEach(([id, timestamp]) => {
          if (typeof timestamp === 'number' && (now - timestamp) < SEEN_EXPIRY_MS) {
              cleaned[id] = timestamp;
@@ -114,7 +111,6 @@ const App: React.FC = () => {
       if (hasChanges) {
           localStorage.setItem('zen_seen_posts', JSON.stringify(cleaned));
       }
-      
       return cleaned;
     } catch (e) {
       console.warn("Failed to parse seen posts", e);
@@ -138,9 +134,9 @@ const App: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const observerTarget = useRef<HTMLDivElement>(null);
+  const touchStartRef = useRef<{x: number, y: number} | null>(null);
 
   // --- Effects for Persistence ---
-
   useEffect(() => {
     localStorage.setItem('zen_theme', theme);
     if (theme === 'dark') {
@@ -152,169 +148,119 @@ const App: React.FC = () => {
 
   useEffect(() => {
     localStorage.setItem('zen_last_feed', JSON.stringify(currentFeed));
-    if (currentSub) {
-        localStorage.setItem('zen_last_sub', JSON.stringify(currentSub));
-    } else {
-        localStorage.removeItem('zen_last_sub');
-    }
-    if (currentSearchQuery) {
-        localStorage.setItem('zen_last_search', JSON.stringify(currentSearchQuery));
-    }
+    if (currentSub) localStorage.setItem('zen_last_sub', JSON.stringify(currentSub));
+    else localStorage.removeItem('zen_last_sub');
+    if (currentSearchQuery) localStorage.setItem('zen_last_search', JSON.stringify(currentSearchQuery));
   }, [currentFeed, currentSub, currentSearchQuery]);
 
-  // Persist Sorting
-  useEffect(() => {
-    localStorage.setItem('zen_sort', JSON.stringify(currentSort));
-  }, [currentSort]);
-
-  useEffect(() => {
-    localStorage.setItem('zen_top_time', JSON.stringify(currentTopTime));
-  }, [currentTopTime]);
-
-  // Persist Page Size
-  useEffect(() => {
-    localStorage.setItem('zen_page_size', JSON.stringify(pageSize));
-  }, [pageSize]);
-
-  // Persist Text Size
-  useEffect(() => {
-    localStorage.setItem('zen_text_size', JSON.stringify(textSize));
-  }, [textSize]);
-
-  useEffect(() => {
-    localStorage.setItem('zen_followed_subs', JSON.stringify(followedSubs));
-  }, [followedSubs]);
-
-  useEffect(() => {
-    localStorage.setItem('zen_blocked_count', blockedCount.toString());
-  }, [blockedCount]);
-
+  useEffect(() => localStorage.setItem('zen_sort', JSON.stringify(currentSort)), [currentSort]);
+  useEffect(() => localStorage.setItem('zen_top_time', JSON.stringify(currentTopTime)), [currentTopTime]);
+  useEffect(() => localStorage.setItem('zen_page_size', JSON.stringify(pageSize)), [pageSize]);
+  useEffect(() => localStorage.setItem('zen_text_size', JSON.stringify(textSize)), [textSize]);
+  useEffect(() => localStorage.setItem('zen_followed_subs', JSON.stringify(followedSubs)), [followedSubs]);
+  useEffect(() => localStorage.setItem('zen_blocked_count', blockedCount.toString()), [blockedCount]);
   useEffect(() => {
     try {
       localStorage.setItem('zen_seen_posts', JSON.stringify(seenPosts));
-    } catch (e) {
-      console.warn("Local storage full, cannot save seen posts history");
-    }
+    } catch (e) {}
   }, [seenPosts]);
+  useEffect(() => localStorage.setItem('zen_ai_config', JSON.stringify(aiConfig)), [aiConfig]);
 
-  useEffect(() => {
-    localStorage.setItem('zen_ai_config', JSON.stringify(aiConfig));
-  }, [aiConfig]);
-
-  // Cache Persistence & Cleanup
   useEffect(() => {
     try {
         const now = Date.now();
         const expiry = 7 * 24 * 60 * 60 * 1000; // 7 days
         const cleaned: Record<string, CachedAnalysis> = {};
-        
         Object.entries(analysisCache).forEach(([key, val]) => {
             const cachedVal = val as CachedAnalysis;
             if (now - cachedVal.timestamp < expiry) {
                 cleaned[key] = cachedVal;
             }
         });
-        
         localStorage.setItem('zen_analysis_cache', JSON.stringify(cleaned));
     } catch (e) {
         console.warn("Failed to save analysis cache", e);
     }
   }, [analysisCache]);
 
-  // Handle Browser Back Button for Modal
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
-      if (selectedPost) {
-        setSelectedPost(null);
-      }
+      if (viewingImage) setViewingImage(null);
+      else if (selectedPost) setSelectedPost(null);
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [selectedPost]);
-
+  }, [selectedPost, viewingImage]);
 
   // --- Handlers ---
-
-  const toggleTheme = () => {
-    setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  };
-
-  const handleFollow = (sub: string) => {
-      if (!followedSubs.includes(sub)) {
-          setFollowedSubs(prev => [...prev, sub]);
-      }
-  };
-
-  const handleUnfollow = (sub: string) => {
-      setFollowedSubs(prev => prev.filter(s => s !== sub));
-  };
-
-  const handleSaveSettings = (config: AIConfig) => {
-      setAiConfig(config);
-  };
+  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  const handleFollow = (sub: string) => !followedSubs.includes(sub) && setFollowedSubs(prev => [...prev, sub]);
+  const handleUnfollow = (sub: string) => setFollowedSubs(prev => prev.filter(s => s !== sub));
+  const handleSaveSettings = (config: AIConfig) => setAiConfig(config);
 
   const handlePostClick = (post: FilteredPost) => {
-      try {
-        window.history.pushState({ postOpen: true }, '', null);
-      } catch (e) {
-        console.debug("History pushState failed", e);
-      }
+      try { window.history.pushState({ postOpen: true }, '', null); } catch (e) {}
       setSelectedPost(post);
-      setSeenPosts(prev => ({
-          ...prev,
-          [post.id]: Date.now()
-      }));
+      setSeenPosts(prev => ({ ...prev, [post.id]: Date.now() }));
+  };
+
+  const handleImageClick = (imageUrl: string) => {
+      try { window.history.pushState({ imageOpen: true }, '', null); } catch (e) {}
+      setViewingImage(imageUrl);
   };
 
   const handlePostClose = () => {
-      if (window.history.state?.postOpen) {
-          try {
-            window.history.back();
-          } catch(e) {
-             setSelectedPost(null);
-          }
-      } else {
-          setSelectedPost(null);
-      }
+      if (window.history.state?.postOpen) try { window.history.back(); } catch(e) { setSelectedPost(null); }
+      else setSelectedPost(null);
+  };
+
+  const handleImageClose = () => {
+      if (window.history.state?.imageOpen) try { window.history.back(); } catch(e) { setViewingImage(null); }
+      else setViewingImage(null);
   };
 
   const handleNavigate = (type: FeedType, sub?: string) => {
+    if (type === currentFeed && sub === currentSub) {
+        setMobileMenuOpen(false);
+        return;
+    }
+    setNavHistory(prev => [...prev, { feed: currentFeed, sub: currentSub, query: currentSearchQuery }]);
     setCurrentFeed(type);
     setCurrentSub(sub);
-    if (type !== 'search') {
-        setCurrentSearchQuery('');
-    }
+    if (type !== 'search') setCurrentSearchQuery('');
     setMobileMenuOpen(false);
-    if (selectedPost) {
-        handlePostClose();
-    }
+    if (selectedPost) handlePostClose();
+    setViewingImage(null);
   };
 
-  const handleNavigateSub = (sub: string) => {
-      handleNavigate('subreddit', sub);
+  const handleTouchStart = (e: React.TouchEvent) => {
+      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
   };
 
-  // --- Search Logic ---
-  const handleSearchSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && searchInput.trim()) {
-        const query = searchInput.trim();
-        if (query.toLowerCase().startsWith('r/')) {
-            const subName = query.substring(2);
-            if (subName) {
-                handleNavigate('subreddit', subName);
-                setSearchInput('');
-                return;
-            }
-        }
-        setCurrentSearchQuery(query);
-        setCurrentFeed('search');
-        setCurrentSub(undefined);
-        setMobileMenuOpen(false);
-    }
+  const handleTouchEnd = (e: React.TouchEvent) => {
+      if (!touchStartRef.current) return;
+      const startX = touchStartRef.current.x;
+      const startY = touchStartRef.current.y;
+      const endX = e.changedTouches[0].clientX;
+      const endY = e.changedTouches[0].clientY;
+      touchStartRef.current = null;
+
+      if (startX < 40 && !viewingImage) {
+          const dx = endX - startX;
+          const dy = Math.abs(endY - startY);
+          if (dx > 80 && dy < 60 && navHistory.length > 0) {
+              const prev = navHistory[navHistory.length - 1];
+              setNavHistory(prevH => prevH.slice(0, -1));
+              setCurrentFeed(prev.feed);
+              setCurrentSub(prev.sub);
+              if (prev.query !== undefined) setCurrentSearchQuery(prev.query);
+          }
+      }
   };
+
+  const handlePostNavigateSub = (sub: string) => handleNavigate('subreddit', sub);
 
   // --- Main Data Fetching Logic ---
-  
   const loadPosts = useCallback(async (isLoadMore = false) => {
     if (loading || analyzing) return;
     
@@ -339,7 +285,6 @@ const App: React.FC = () => {
       );
 
       setAfter(newAfter);
-
       const rawPosts = rawPostsData.map(p => p.data);
 
       if (rawPosts.length === 0) {
@@ -348,150 +293,116 @@ const App: React.FC = () => {
           return;
       }
 
-      // --- Caching Logic ---
-      const now = Date.now();
-      const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 Days
+      // --- Caching & Analysis Logic ---
       const postsToAnalyze: RedditPostData[] = [];
-      const cachedResults: { id: string; isRageBait: boolean; zenScore: number; reason: string }[] = [];
+      const newCache = { ...analysisCache };
+      let newAnalysisResults: AnalysisResult[] = [];
 
-      rawPosts.forEach(post => {
-          const cached = analysisCache[post.id];
-          if (cached && (now - cached.timestamp < CACHE_DURATION)) {
-              cachedResults.push(cached);
+      // Check cache for each post
+      const postsWithCache = rawPosts.map(p => {
+          if (newCache[p.id]) {
+              return { ...p, ...newCache[p.id] };
           } else {
-              postsToAnalyze.push(post);
+              postsToAnalyze.push(p);
+              return p; 
           }
       });
 
-      let newAnalysisResults: { id: string; isRageBait: boolean; zenScore: number; reason: string }[] = [];
-
+      // Analyze new posts
       if (postsToAnalyze.length > 0) {
-          if (!isLoadMore) setLoading(false);
-          setAnalyzing(true);
-
-          newAnalysisResults = await analyzePostsForZen(postsToAnalyze, aiConfig);
-          
-          setAnalysisCache(prev => {
-              const next = { ...prev };
-              newAnalysisResults.forEach(r => {
-                  next[r.id] = { ...r, timestamp: Date.now() };
-              });
-              return next;
-          });
-      } else {
-          // If everything is cached, ensure analyzing state is briefly shown then cleared in finally
-          // This keeps the flow consistent but fast
-          setAnalyzing(true); 
+          try {
+             newAnalysisResults = await analyzePostsForZen(postsToAnalyze, aiConfig);
+             
+             // Update Cache
+             newAnalysisResults.forEach(res => {
+                 newCache[res.id] = { ...res, timestamp: Date.now() };
+             });
+             setAnalysisCache(newCache);
+          } catch (e) {
+              console.warn("Analysis error", e);
+          }
       }
 
-      const analysisResults = [...cachedResults, ...newAnalysisResults];
-      // --- End Caching Logic ---
+      // Merge analysis results
+      const finalPosts = postsWithCache.map((p: any) => {
+           const fresh = newAnalysisResults.find(r => r.id === p.id);
+           if (fresh) return { ...p, ...fresh };
+           if (newCache[p.id]) return { ...p, ...newCache[p.id] };
+           return p;
+      });
+
+      // Filter Logic
+      const threshold = aiConfig.minZenScore ?? 50;
+      const filtered = finalPosts.filter((p: any) => (p.zenScore ?? 50) >= threshold);
       
-      const blockedInThisBatch = analysisResults.filter(r => r.isRageBait).length;
-      if (blockedInThisBatch > 0) {
-          setBlockedCount(prev => prev + blockedInThisBatch);
-      }
+      const blocked = finalPosts.length - filtered.length;
+      if (blocked > 0) setBlockedCount(prev => prev + blocked);
 
-      const processedPosts: FilteredPost[] = rawPosts.map(post => {
-        const analysis = analysisResults.find(a => a.id === post.id);
-        const zenScore = analysis ? analysis.zenScore : 50;
-        const threshold = aiConfig.minZenScore ?? 50;
-        const calculatedIsRageBait = zenScore < threshold;
+      setPosts(prev => isLoadMore ? [...prev, ...filtered] : filtered);
 
-        return {
-          ...post,
-          isRageBait: calculatedIsRageBait,
-          zenScore: zenScore,
-          zenReason: analysis ? analysis.reason : 'Pending'
-        };
-      }).filter(p => !p.isRageBait);
-
-      setPosts(prev => isLoadMore ? [...prev, ...processedPosts] : processedPosts);
-    } catch (e: any) {
-      console.error(e);
-      if (!isLoadMore) {
-        setError(e.message || "Failed to load content. Reddit might be blocking connections.");
-      }
+    } catch (err: any) {
+        setError(err.message || "Failed to load feed");
     } finally {
-      setLoading(false);
-      setAnalyzing(false);
+        setLoading(false);
+        setAnalyzing(false);
     }
-  }, [currentFeed, currentSub, after, followedSubs, loading, analyzing, aiConfig, currentSearchQuery, currentSort, currentTopTime, analysisCache, pageSize]);
+  }, [loading, analyzing, currentFeed, currentSub, after, followedSubs, currentSearchQuery, currentSort, currentTopTime, pageSize, analysisCache, aiConfig]);
 
-  // Initial load when feed or sort changes
+  // Initial Load & Triggers
   useEffect(() => {
-    setPosts([]);
-    setAfter(null);
-    loadPosts(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentFeed, currentSub, currentSearchQuery, currentSort, currentTopTime, pageSize]);
-  
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-        entries => {
-            if (entries[0].isIntersecting && !loading && !analyzing && posts.length > 0 && !error) {
-                loadPosts(true);
-            }
-        },
-        { threshold: 0.1 }
-    );
-    
-    const currentTarget = observerTarget.current;
-    if (currentTarget) {
-        observer.observe(currentTarget);
-    }
+      loadPosts(false);
+  }, [currentFeed, currentSub, currentSearchQuery, currentSort, currentTopTime, pageSize, aiConfig.provider, aiConfig.openRouterModel, aiConfig.customInstructions, followedSubs]); 
 
-    return () => {
-        if (currentTarget) observer.unobserve(currentTarget);
-    };
-  }, [loading, analyzing, posts.length, loadPosts, error]);
+  // Infinite Scroll
+  useEffect(() => {
+      if (!observerTarget.current || loading || analyzing || !after) return;
+      
+      const observer = new IntersectionObserver(entries => {
+          if (entries[0].isIntersecting) {
+              loadPosts(true);
+          }
+      }, { threshold: 0.1 });
+      
+      observer.observe(observerTarget.current);
+      return () => observer.disconnect();
+  }, [observerTarget, loading, analyzing, after, loadPosts]);
+
 
   return (
-    <div className="flex min-h-screen bg-stone-100 dark:bg-stone-950 font-sans text-stone-900 dark:text-stone-100 transition-colors">
-      
+    <div className="flex bg-stone-100 dark:bg-stone-950 min-h-screen text-stone-900 dark:text-stone-100 transition-colors font-sans" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
       {/* Mobile Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800 z-40 flex items-center justify-between px-4 transition-colors">
-        <h1 className="text-xl font-light text-stone-800 dark:text-stone-100 flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-emerald-400"></span>
-            ZenReddit
-        </h1>
-        <div className="flex items-center gap-2">
-             <button onClick={() => setSettingsOpen(true)} className="p-2 text-stone-600 dark:text-stone-400">
-                <Settings size={20} />
-            </button>
-            <button onClick={toggleTheme} className="p-2 text-stone-600 dark:text-stone-400">
-                {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
-            </button>
-            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2 text-stone-600 dark:text-stone-400">
-                <Menu />
-            </button>
-        </div>
+      <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-white dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800 z-40 flex items-center justify-between px-4">
+        <button onClick={() => setMobileMenuOpen(true)} className="p-2 -ml-2 text-stone-600 dark:text-stone-300">
+           <Menu size={24} />
+        </button>
+        <span className="font-semibold text-lg">ZenReddit</span>
+        <div className="w-8"></div>
       </div>
 
-      {/* Mobile Menu Overlay */}
+      {/* Mobile Sidebar Drawer */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 bg-white dark:bg-stone-900 md:hidden overflow-y-auto">
-            <div className="flex justify-end p-4 border-b border-stone-100 dark:border-stone-800 sticky top-0 bg-white dark:bg-stone-900 z-10">
-                <button onClick={() => setMobileMenuOpen(false)} className="text-stone-800 dark:text-stone-200"><X /></button>
-            </div>
-             <Sidebar 
-                currentFeed={currentFeed}
-                currentSub={currentSub}
-                onNavigate={handleNavigate}
-                followedSubs={followedSubs}
-                onFollow={handleFollow}
-                onUnfollow={handleUnfollow}
-                theme={theme}
-                toggleTheme={toggleTheme}
-                blockedCount={blockedCount}
-                onOpenSettings={() => setSettingsOpen(true)}
-            />
-        </div>
+          <div className="fixed inset-0 z-50 md:hidden">
+              <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)}></div>
+              <div className="absolute top-0 left-0 bottom-0 w-64 bg-white dark:bg-stone-900 shadow-xl animate-in slide-in-from-left duration-200">
+                  <Sidebar 
+                    currentFeed={currentFeed}
+                    currentSub={currentSub}
+                    onNavigate={handleNavigate}
+                    followedSubs={followedSubs}
+                    onFollow={handleFollow}
+                    onUnfollow={handleUnfollow}
+                    theme={theme}
+                    toggleTheme={toggleTheme}
+                    blockedCount={blockedCount}
+                    onOpenSettings={() => { setSettingsOpen(true); setMobileMenuOpen(false); }}
+                  />
+              </div>
+          </div>
       )}
 
       {/* Desktop Sidebar */}
       <div className="hidden md:block">
-        <Sidebar 
+          <Sidebar 
             currentFeed={currentFeed}
             currentSub={currentSub}
             onNavigate={handleNavigate}
@@ -502,238 +413,117 @@ const App: React.FC = () => {
             toggleTheme={toggleTheme}
             blockedCount={blockedCount}
             onOpenSettings={() => setSettingsOpen(true)}
-        />
+          />
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 p-4 md:p-8 pt-20 md:pt-8 max-w-4xl mx-auto w-full">
-        
-        {/* Missing API Key Warning */}
-        {!aiConfig.openRouterKey && (
-            <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-start gap-4 shadow-sm animate-in slide-in-from-top-2 fade-in">
-                <div className="p-2 bg-amber-100 dark:bg-amber-800/50 rounded-lg text-amber-600 dark:text-amber-400 shrink-0">
-                    <TriangleAlert size={24} />
-                </div>
-                <div className="flex-1">
-                    <h3 className="font-semibold text-amber-900 dark:text-amber-100">AI Not Configured</h3>
-                    <p className="text-sm text-amber-700 dark:text-amber-300 mt-1 mb-3">
-                        ZenReddit requires an OpenRouter API key to filter content. Without it, posts won't be analyzed for rage-bait.
-                    </p>
-                    <button 
-                        onClick={() => setSettingsOpen(true)}
-                        className="text-sm font-medium bg-amber-100 dark:bg-amber-800 text-amber-800 dark:text-amber-200 px-4 py-2 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-700 transition-colors"
-                    >
-                        Add API Key
-                    </button>
-                </div>
-            </div>
-        )}
-
-        {/* Global Search Bar */}
-        <div className="mb-6 relative group">
-            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-stone-400 group-focus-within:text-emerald-500 transition-colors">
-                <Search size={20} />
-            </div>
-            <input
-                type="text"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={handleSearchSubmit}
-                placeholder="Search Reddit or type 'r/subreddit' to visit..."
-                className="w-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-xl py-3 pl-10 pr-4 text-stone-800 dark:text-stone-100 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 shadow-sm transition-all"
-            />
-            {searchInput && (
-                <button 
-                    onClick={() => setSearchInput('')} 
-                    className="absolute inset-y-0 right-3 flex items-center text-stone-400 hover:text-stone-600 dark:hover:text-stone-200"
-                >
-                    <X size={16} />
-                </button>
-            )}
-        </div>
-
-        {/* Header Area */}
-        <div className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-                <h2 className="text-3xl font-light text-stone-800 dark:text-stone-100 tracking-tight flex items-center gap-3">
-                    {currentFeed === 'popular' && "Popular on Reddit"}
-                    {currentFeed === 'all' && "All of Reddit"}
-                    {currentFeed === 'subreddit' && (
-                        <>
-                            <span>r/{currentSub}</span>
-                            {currentSub && (
-                                <button
-                                    onClick={() => followedSubs.includes(currentSub) ? handleUnfollow(currentSub) : handleFollow(currentSub)}
-                                    className={`text-sm flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all ${
-                                        followedSubs.includes(currentSub)
-                                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-900/30 dark:hover:text-red-400"
-                                            : "bg-white text-stone-600 border-stone-200 dark:bg-stone-800 dark:text-stone-300 dark:border-stone-700 hover:border-emerald-400 hover:text-emerald-600 dark:hover:border-emerald-600"
-                                    }`}
-                                >
-                                    {followedSubs.includes(currentSub) ? (
-                                        <>
-                                            <Check size={14} />
-                                            <span>Joined</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Heart size={14} />
-                                            <span>Join</span>
-                                        </>
-                                    )}
-                                </button>
-                            )}
-                        </>
-                    )}
-                    {currentFeed === 'search' && `Results for "${currentSearchQuery}"`}
-                </h2>
-                <p className="text-stone-500 dark:text-stone-400 mt-1">
-                    {analyzing ? "AI is purifying your stream..." : "Curated for calm."}
-                </p>
-            </div>
-            
-            <button 
-                onClick={() => loadPosts(false)}
-                className="hidden md:flex items-center justify-center space-x-2 bg-white dark:bg-stone-900 px-4 py-2 rounded-lg border border-stone-200 dark:border-stone-800 shadow-sm hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors text-sm font-medium text-stone-600 dark:text-stone-300"
-            >
-                <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-                <span>Refresh</span>
-            </button>
-        </div>
-
-        {/* Sort Controls */}
-        <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide md:pb-0">
-             {[
-                { id: 'hot', label: 'Hot', icon: Flame },
-                { id: 'new', label: 'New', icon: Clock },
-                { id: 'rising', label: 'Rising', icon: TrendingUp },
-                { id: 'top', label: 'Top', icon: Trophy },
-             ].map((opt) => (
-                 <button
-                    key={opt.id}
-                    onClick={() => setCurrentSort(opt.id as SortOption)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all shrink-0 ${
-                        currentSort === opt.id 
-                            ? 'bg-stone-800 text-white dark:bg-stone-100 dark:text-stone-900 shadow-md' 
-                            : 'bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-400 border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800'
-                    }`}
+      <main className="flex-1 w-full max-w-3xl mx-auto px-4 pt-16 md:pt-8 md:px-8 pb-8 min-h-screen">
+         {/* Toolbar */}
+         <div className="flex items-center justify-between mb-6">
+             <div className="flex items-center space-x-2 overflow-x-auto pb-2 hide-scrollbar">
+                 <select 
+                    value={currentSort} 
+                    onChange={(e) => setCurrentSort(e.target.value as SortOption)}
+                    className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg px-3 py-1.5 text-sm font-medium focus:outline-none cursor-pointer"
                  >
-                    <opt.icon size={14} />
-                    {opt.label}
-                 </button>
-             ))}
+                    <option value="hot">Hot</option>
+                    <option value="new">New</option>
+                    <option value="top">Top</option>
+                    <option value="rising">Rising</option>
+                 </select>
 
-             {/* Time Dropdown for Top Sort */}
-             {currentSort === 'top' && (
-                 <div className="relative animate-in fade-in slide-in-from-left-2 ml-1">
-                    <select
-                        value={currentTopTime}
+                 {currentSort === 'top' && (
+                     <select 
+                        value={currentTopTime} 
                         onChange={(e) => setCurrentTopTime(e.target.value as TopTimeOption)}
-                        className="appearance-none pl-3 pr-8 py-1.5 bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-lg text-sm font-medium text-stone-700 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 cursor-pointer"
-                    >
+                        className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg px-3 py-1.5 text-sm font-medium focus:outline-none cursor-pointer"
+                     >
                         <option value="hour">Now</option>
                         <option value="day">Today</option>
                         <option value="week">This Week</option>
                         <option value="month">This Month</option>
                         <option value="year">This Year</option>
                         <option value="all">All Time</option>
-                    </select>
-                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-stone-500">
-                        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                    </div>
-                 </div>
-             )}
-             
-             {/* Mobile Refresh Button (Inline with sort) */}
-             <div className="flex-1 md:hidden"></div>
+                     </select>
+                 )}
+             </div>
+
              <button 
-                onClick={() => loadPosts(false)}
-                className="md:hidden p-2 bg-white dark:bg-stone-900 rounded-full border border-stone-200 dark:border-stone-800 shadow-sm text-stone-600 dark:text-stone-400"
+                onClick={() => loadPosts(false)} 
+                className={`p-2 rounded-full hover:bg-stone-200 dark:hover:bg-stone-800 transition-colors ${loading ? 'animate-spin' : ''}`}
+                title="Refresh"
              >
-                <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+                 <RefreshCw size={20} className="text-stone-500" />
              </button>
-        </div>
+         </div>
 
-        {/* Feed */}
-        <div className="space-y-4">
-            {/* Show skeleton loader while fetching initial data from Reddit */}
-            {loading && posts.length === 0 && (
-                <div className="space-y-4">
-                    {[1, 2, 3, 4, 5].map(i => (
-                        <PostSkeleton key={i} />
-                    ))}
-                </div>
-            )}
-
-            {/* Error State */}
-            {error && posts.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-20 text-center animate-in fade-in">
-                  <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-full mb-4">
-                    <CloudOff size={40} className="text-red-400 dark:text-red-500" />
-                  </div>
-                  <h3 className="text-lg font-medium text-stone-800 dark:text-stone-200 mb-2">Connection Issue</h3>
-                  <p className="text-stone-500 dark:text-stone-400 max-w-sm mb-6">
-                    {error}
-                  </p>
-                  <button 
-                    onClick={() => loadPosts(false)}
-                    className="px-6 py-2 bg-stone-800 dark:bg-stone-700 text-white rounded-lg hover:bg-stone-700 dark:hover:bg-stone-600 transition-colors font-medium text-sm"
-                  >
-                    Try Again
-                  </button>
-              </div>
-            )}
-
-            {/* Show visualizer while AI analyzes initial batch */}
-            {analyzing && posts.length === 0 && (
-                <ScanningVisualizer mode="full" />
-            )}
-
-            {!loading && !error && posts.length === 0 && !analyzing && (
-                <div className="text-center py-20 text-stone-400 dark:text-stone-500">
-                    <p>No zen content found right now.</p>
-                    {!aiConfig.openRouterKey && (
-                        <p className="text-sm mt-4 text-emerald-600 dark:text-emerald-400 cursor-pointer" onClick={() => setSettingsOpen(true)}>
-                            Open Settings to add your OpenRouter Key
+         {/* Content Area */}
+         {loading && posts.length === 0 ? (
+             <div className="space-y-4">
+                 {[1,2,3].map(i => <PostSkeleton key={i} />)}
+                 <ScanningVisualizer mode="compact" />
+             </div>
+         ) : error ? (
+             <div className="flex flex-col items-center justify-center py-20 text-center">
+                 <CloudOff size={48} className="text-stone-300 mb-4" />
+                 <h3 className="text-xl font-medium text-stone-600 dark:text-stone-400">Connection Error</h3>
+                 <p className="text-stone-500 dark:text-stone-500 mt-2 mb-6 max-w-sm">{error}</p>
+                 <button onClick={() => loadPosts(false)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">Try Again</button>
+             </div>
+         ) : (
+             <>
+                {posts.length === 0 && !loading && !analyzing ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                        <TriangleAlert size={48} className="text-stone-300 mb-4" />
+                        <h3 className="text-xl font-medium text-stone-600 dark:text-stone-400">No Posts Found</h3>
+                        <p className="text-stone-500 dark:text-stone-500 mt-2 max-w-sm">
+                            Try adjusting your filters or checking a different subreddit. 
+                            If you have "Strict" filtering on, try relaxing it in settings.
                         </p>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {posts.map(post => (
+                            <PostCard 
+                                key={post.id} 
+                                post={post} 
+                                isSeen={!!seenPosts[post.id]}
+                                onClick={handlePostClick}
+                                onNavigateSub={handlePostNavigateSub}
+                                onImageClick={handleImageClick}
+                            />
+                        ))}
+                    </div>
+                )}
+                
+                {/* Loader / Scanner at bottom */}
+                <div ref={observerTarget} className="py-8 flex flex-col items-center justify-center min-h-[100px]">
+                    {(loading || analyzing) && (
+                         analyzing ? <ScanningVisualizer mode="compact" /> : <Loader2 className="animate-spin text-stone-400" size={32} />
                     )}
                 </div>
-            )}
-
-            {posts.map(post => (
-                <PostCard 
-                    key={post.id} 
-                    post={post} 
-                    isSeen={!!seenPosts[post.id]}
-                    onClick={handlePostClick} 
-                    onNavigateSub={handleNavigateSub}
-                />
-            ))}
-
-            {/* Infinite Scroll Sentinel */}
-            {posts.length > 0 && !error && (
-                <div ref={observerTarget} className="flex justify-center py-8 min-h-[100px]">
-                     {(analyzing || loading) && (
-                        <ScanningVisualizer mode="compact" />
-                     )}
-                </div>
-            )}
-        </div>
+             </>
+         )}
       </main>
 
-      {/* Post Detail Modal */}
+      {/* Modals */}
       {selectedPost && (
-        <PostDetail 
+          <PostDetail 
             post={selectedPost} 
-            onClose={handlePostClose}
-            onNavigateSub={handleNavigateSub}
+            onClose={handlePostClose} 
+            onNavigateSub={handlePostNavigateSub}
             textSize={textSize}
-        />
+          />
       )}
 
-      {/* Settings Modal */}
+      {viewingImage && (
+          <ImageViewer 
+            src={viewingImage} 
+            alt="Full size" 
+            onClose={handleImageClose} 
+          />
+      )}
+
       <SettingsModal 
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
