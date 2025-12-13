@@ -104,7 +104,8 @@ export const fetchFeed = async (
   followedSubs: string[] = [],
   searchQuery?: string,
   sort: SortOption = 'hot',
-  time: TopTimeOption = 'day'
+  time: TopTimeOption = 'day',
+  limit: number = 25
 ): Promise<{ posts: RedditPost[]; after: string | null }> => {
   let url = '';
   
@@ -113,7 +114,7 @@ export const fetchFeed = async (
     // Search has a different structure: /search.json?q=...&sort=...
     // Note: Search doesn't support 'rising', map it to relevance or hot.
     const searchSort = sort === 'rising' ? 'relevance' : sort;
-    url = `${BASE_URL}/search.json?q=${encodeURIComponent(searchQuery)}&sort=${searchSort}&limit=15&raw_json=1`;
+    url = `${BASE_URL}/search.json?q=${encodeURIComponent(searchQuery)}&sort=${searchSort}&limit=${limit}&raw_json=1`;
   } else {
     // Standard feeds
     let path = '';
@@ -122,7 +123,7 @@ export const fetchFeed = async (
     else if (type === 'subreddit' && subreddit) path = `/r/${subreddit}`;
     
     // Add Sort to path
-    url = `${BASE_URL}${path}/${sort}.json?limit=15&raw_json=1`;
+    url = `${BASE_URL}${path}/${sort}.json?limit=${limit}&raw_json=1`;
   }
 
   // Append Time parameter for 'Top' sort

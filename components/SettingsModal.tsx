@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, CircleAlert, Loader2, Shield, Key, Check, Search, Sparkles } from 'lucide-react';
+import { X, Save, CircleAlert, Loader2, Shield, Key, Check, Search, Sparkles, Layers } from 'lucide-react';
 import { AIConfig, AIProvider } from '../types';
 
 interface SettingsModalProps {
@@ -8,14 +8,17 @@ interface SettingsModalProps {
   onClose: () => void;
   config: AIConfig;
   onSave: (config: AIConfig) => void;
+  pageSize: number;
+  onPageSizeChange: (size: number) => void;
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, onSave }) => {
+const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, onSave, pageSize, onPageSizeChange }) => {
   const [provider] = useState<AIProvider>('openrouter');
   const [openRouterKey, setOpenRouterKey] = useState('');
   const [openRouterModel, setOpenRouterModel] = useState('google/gemini-2.0-flash-lite-preview-02-05:free');
   const [minZenScore, setMinZenScore] = useState(50);
   const [customInstructions, setCustomInstructions] = useState('');
+  const [localPageSize, setLocalPageSize] = useState(pageSize);
   
   // New state for models
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
@@ -31,8 +34,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
       setOpenRouterModel(config.openRouterModel || 'google/gemini-2.0-flash-lite-preview-02-05:free');
       setMinZenScore(config.minZenScore ?? 50);
       setCustomInstructions(config.customInstructions || '');
+      setLocalPageSize(pageSize);
     }
-  }, [isOpen, config]);
+  }, [isOpen, config, pageSize]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -87,6 +91,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
       minZenScore,
       customInstructions
     });
+    onPageSizeChange(localPageSize);
     onClose();
   };
 
@@ -144,6 +149,34 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
                     {minZenScore < 40 && "Only extreme rage bait will be blocked. Mild annoyances will pass through."}
                     {minZenScore >= 40 && minZenScore <= 60 && "Standard filtering. Blocks obviously divisive content and anger-inducing posts."}
                     {minZenScore > 60 && "High purity. Filters out anything even slightly controversial or non-constructive."}
+                </p>
+            </div>
+            
+            <div className="border-t border-stone-100 dark:border-stone-800"></div>
+
+            {/* Page Size Section */}
+            <div>
+                <div className="flex items-center gap-2 mb-3">
+                     <Layers size={16} className="text-stone-400" />
+                     <h3 className="text-sm font-semibold text-stone-800 dark:text-stone-200">Posts per Load</h3>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                    {[25, 50, 100].map((size) => (
+                        <button
+                            key={size}
+                            onClick={() => setLocalPageSize(size)}
+                            className={`px-3 py-2 text-sm font-medium rounded-lg border transition-all ${
+                                localPageSize === size
+                                    ? 'bg-stone-800 text-white dark:bg-stone-100 dark:text-stone-900 border-stone-800 dark:border-stone-100'
+                                    : 'bg-white dark:bg-stone-950 text-stone-600 dark:text-stone-400 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800'
+                            }`}
+                        >
+                            {size}
+                        </button>
+                    ))}
+                </div>
+                <p className="text-xs text-stone-400 mt-2">
+                    Higher values load more posts but may be slower to analyze.
                 </p>
             </div>
 

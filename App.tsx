@@ -64,6 +64,9 @@ const App: React.FC = () => {
   const [currentSort, setCurrentSort] = useState<SortOption>(() => loadFromStorage<SortOption>('zen_sort', 'hot'));
   const [currentTopTime, setCurrentTopTime] = useState<TopTimeOption>(() => loadFromStorage<TopTimeOption>('zen_top_time', 'day'));
 
+  // Page Size State
+  const [pageSize, setPageSize] = useState<number>(() => loadFromStorage<number>('zen_page_size', 25));
+
   // Data State
   const [posts, setPosts] = useState<FilteredPost[]>([]);
   const [loading, setLoading] = useState(false);
@@ -164,6 +167,11 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('zen_top_time', JSON.stringify(currentTopTime));
   }, [currentTopTime]);
+
+  // Persist Page Size
+  useEffect(() => {
+    localStorage.setItem('zen_page_size', JSON.stringify(pageSize));
+  }, [pageSize]);
 
   useEffect(() => {
     localStorage.setItem('zen_followed_subs', JSON.stringify(followedSubs));
@@ -318,7 +326,8 @@ const App: React.FC = () => {
         followedSubs,
         currentSearchQuery,
         currentSort,
-        currentTopTime
+        currentTopTime,
+        pageSize
       );
 
       setAfter(newAfter);
@@ -399,7 +408,7 @@ const App: React.FC = () => {
       setLoading(false);
       setAnalyzing(false);
     }
-  }, [currentFeed, currentSub, after, followedSubs, loading, analyzing, aiConfig, currentSearchQuery, currentSort, currentTopTime, analysisCache]);
+  }, [currentFeed, currentSub, after, followedSubs, loading, analyzing, aiConfig, currentSearchQuery, currentSort, currentTopTime, analysisCache, pageSize]);
 
   // Initial load when feed or sort changes
   useEffect(() => {
@@ -407,7 +416,7 @@ const App: React.FC = () => {
     setAfter(null);
     loadPosts(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentFeed, currentSub, currentSearchQuery, currentSort, currentTopTime]);
+  }, [currentFeed, currentSub, currentSearchQuery, currentSort, currentTopTime, pageSize]);
   
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -721,6 +730,8 @@ const App: React.FC = () => {
         onClose={() => setSettingsOpen(false)}
         config={aiConfig}
         onSave={handleSaveSettings}
+        pageSize={pageSize}
+        onPageSizeChange={setPageSize}
       />
 
     </div>
