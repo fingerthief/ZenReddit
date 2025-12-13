@@ -36,6 +36,13 @@ export interface RedditPostData {
   };
   is_gallery?: boolean;
   media_metadata?: Record<string, any>;
+  gallery_data?: {
+    items: {
+      media_id: string;
+      id: number;
+      caption?: string;
+    }[];
+  };
 }
 
 export interface RedditPost {

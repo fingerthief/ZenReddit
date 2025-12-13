@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo, memo } from 'react';
 import { FilteredPost, RedditComment, RedditListing } from '../types';
 import { fetchComments } from '../services/redditService';
-import { X, ExternalLink, Loader2, ArrowBigUp, ChevronLeft, MinusSquare, PlusSquare, MessageSquare } from 'lucide-react';
+import { X, ExternalLink, Loader2, ArrowBigUp, ChevronLeft, ChevronRight, MinusSquare, PlusSquare, MessageSquare, Images } from 'lucide-react';
 import Hls from 'hls.js';
 import { formatDistanceToNow } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
@@ -72,6 +72,118 @@ const MarkdownRenderer: React.FC<{ content: string; onNavigateSub?: (sub: string
     </div>
   );
 });
+
+// Gallery Component
+const GalleryViewer: React.FC<{ items: { src: string; caption?: string; id: string | number }[] }> = ({ items }) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
+  const minSwipeDistance = 50;
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+    
+    if (isLeftSwipe && currentIndex < items.length - 1) {
+       setCurrentIndex(curr => curr + 1);
+    }
+    if (isRightSwipe && currentIndex > 0) {
+       setCurrentIndex(curr => curr - 1);
+    }
+  };
+
+  const handlePrev = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (currentIndex > 0) setCurrentIndex(curr => curr - 1);
+  };
+
+  const handleNext = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (currentIndex < items.length - 1) setCurrentIndex(curr => curr + 1);
+  };
+
+  const currentItem = items[currentIndex];
+
+  if (!currentItem) return null;
+
+  return (
+    <div 
+        className="relative w-full bg-stone-100 dark:bg-stone-900 rounded-lg overflow-hidden mb-6 group select-none shadow-sm"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+    >
+        {/* Main Image Container */}
+        <div className="relative flex justify-center items-center min-h-[300px] md:min-h-[400px] bg-stone-100 dark:bg-stone-950">
+             <img 
+                key={currentItem.src} // Key forces re-render for clean transitions
+                src={currentItem.src} 
+                alt={currentItem.caption || `Image ${currentIndex + 1}`}
+                className="max-h-[70vh] w-full object-contain animate-in fade-in duration-300"
+                loading="eager"
+            />
+            
+            {/* Desktop Hover Navigation Buttons */}
+            {currentIndex > 0 && (
+                <button 
+                    onClick={handlePrev}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 p-2 bg-black/40 hover:bg-black/60 text-white rounded-full backdrop-blur-md transition-all opacity-0 group-hover:opacity-100 hidden md:flex items-center justify-center transform hover:scale-110"
+                    title="Previous Image"
+                >
+                    <ChevronLeft size={28} />
+                </button>
+            )}
+            
+            {currentIndex < items.length - 1 && (
+                <button 
+                    onClick={handleNext}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-black/40 hover:bg-black/60 text-white rounded-full backdrop-blur-md transition-all opacity-0 group-hover:opacity-100 hidden md:flex items-center justify-center transform hover:scale-110"
+                    title="Next Image"
+                >
+                    <ChevronRight size={28} />
+                </button>
+            )}
+        </div>
+
+        {/* Caption Overlay */}
+        {currentItem.caption && (
+            <div className="bg-white dark:bg-stone-900 p-3 text-sm text-stone-600 dark:text-stone-300 border-t border-stone-100 dark:border-stone-800">
+                {currentItem.caption}
+            </div>
+        )}
+        
+        {/* Image Counter Badge */}
+        <div className="absolute top-3 right-3 bg-black/60 text-white px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-sm flex items-center gap-1.5 shadow-sm">
+            <Images size={12} />
+            {currentIndex + 1} / {items.length}
+        </div>
+
+        {/* Mobile Dots Indicator */}
+        {items.length > 1 && items.length <= 10 && (
+             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 md:hidden pointer-events-none">
+                {items.map((_, idx) => (
+                    <div 
+                        key={idx} 
+                        className={`w-1.5 h-1.5 rounded-full transition-all shadow-sm ${idx === currentIndex ? 'bg-white scale-125' : 'bg-white/40'}`}
+                    />
+                ))}
+             </div>
+        )}
+    </div>
+  );
+};
 
 const CommentNode: React.FC<{ comment: RedditComment; depth?: number; onNavigateSub?: (sub: string) => void }> = memo(({ comment, depth = 0, onNavigateSub }) => {
   const [collapsed, setCollapsed] = useState(false);
@@ -259,6 +371,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub })
   };
 
   const renderMedia = () => {
+    // 1. Video
     if (post.secure_media?.reddit_video) {
         return (
             <video 
@@ -270,7 +383,32 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub })
             />
         )
     }
-    if (post.url && post.url.match(/\.(jpg|jpeg|png|gif)$/i)) {
+
+    // 2. Reddit Native Gallery
+    if (post.is_gallery && post.gallery_data && post.media_metadata) {
+        const galleryItems = post.gallery_data.items.map((item) => {
+            const media = post.media_metadata![item.media_id];
+            // 's' is the source object. 'u' is url, 'gif' is gif url.
+            // With raw_json=1, we don't need to decode entities usually, but safety check doesn't hurt.
+            let src = media?.s?.u || media?.s?.gif;
+            if (!src) return null;
+            
+            src = src.replace(/&amp;/g, '&');
+
+            return {
+                id: item.id,
+                src,
+                caption: item.caption
+            };
+        }).filter((i): i is { id: number; src: string; caption?: string | undefined; } => i !== null);
+
+        if (galleryItems.length > 0) {
+            return <GalleryViewer items={galleryItems} />;
+        }
+    }
+
+    // 3. Image via URL extension (standard direct links)
+    if (post.url && post.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
       return (
         <img 
             src={post.url} 
@@ -279,10 +417,39 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub })
         />
       );
     }
-    // Simple link preview fallback
+
+    // 4. Fallback: Check Preview Images (High Res)
+    // This catches Imgur Albums (Cover), External images without extensions, etc.
+    if (post.preview?.images?.[0]?.source?.url) {
+        const src = post.preview.images[0].source.url.replace(/&amp;/g, '&');
+        const isImgurAlbum = post.url.includes('imgur.com/a/') || post.url.includes('imgur.com/gallery/');
+
+        return (
+            <div className="relative mb-4 group inline-block w-full">
+                 <img 
+                    src={src} 
+                    alt={post.title} 
+                    className="w-full rounded-lg object-contain max-h-[600px] bg-stone-100 dark:bg-stone-900" 
+                 />
+                 {isImgurAlbum && (
+                    <a 
+                        href={post.url} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="absolute bottom-4 right-4 bg-stone-900/80 text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 hover:bg-black transition-colors backdrop-blur-sm shadow-lg"
+                    >
+                        <ExternalLink size={14} />
+                        View Full Album on Imgur
+                    </a>
+                 )}
+            </div>
+        )
+    }
+
+    // 5. Link Fallback
     if (post.url && !post.url.includes('reddit.com')) {
         return (
-            <a href={post.url} target="_blank" rel="noreferrer" className="flex items-center p-4 bg-stone-100 dark:bg-stone-800 rounded-lg mb-4 text-blue-600 dark:text-blue-400 hover:underline break-all">
+            <a href={post.url} target="_blank" rel="noreferrer" className="flex items-center p-4 bg-stone-100 dark:bg-stone-800 rounded-lg mb-4 text-blue-600 dark:text-blue-400 hover:underline break-all transition-colors hover:bg-stone-200 dark:hover:bg-stone-700">
                 <ExternalLink className="mr-2 shrink-0" size={16} />
                 <span className="truncate">{post.url}</span>
             </a>
