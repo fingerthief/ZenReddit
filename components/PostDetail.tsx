@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef, useMemo, memo } from 'react';
 import { FilteredPost, RedditComment, RedditListing } from '../types';
 import { fetchComments } from '../services/redditService';
@@ -11,6 +12,7 @@ interface PostDetailProps {
   post: FilteredPost;
   onClose: () => void;
   onNavigateSub?: (sub: string) => void;
+  textSize: 'small' | 'medium' | 'large';
 }
 
 // Helper to extract image URLs from text
@@ -28,9 +30,15 @@ const extractMediaFromText = (text: string) => {
 };
 
 // Markdown Renderer Component
-const MarkdownRenderer: React.FC<{ content: string; onNavigateSub?: (sub: string) => void }> = memo(({ content, onNavigateSub }) => {
+const MarkdownRenderer: React.FC<{ content: string; onNavigateSub?: (sub: string) => void; textSize: 'small' | 'medium' | 'large' }> = memo(({ content, onNavigateSub, textSize }) => {
+  const proseClass = {
+      small: 'prose-sm',
+      medium: 'prose-base',
+      large: 'prose-lg'
+  }[textSize];
+
   return (
-    <div className="prose prose-stone dark:prose-invert prose-sm max-w-none break-words leading-relaxed opacity-90">
+    <div className={`prose prose-stone dark:prose-invert ${proseClass} max-w-none break-words leading-relaxed opacity-90`}>
       <ReactMarkdown 
         remarkPlugins={[remarkGfm]}
         components={{
@@ -185,7 +193,7 @@ const GalleryViewer: React.FC<{ items: { src: string; caption?: string; id: stri
   );
 };
 
-const CommentNode: React.FC<{ comment: RedditComment; depth?: number; onNavigateSub?: (sub: string) => void }> = memo(({ comment, depth = 0, onNavigateSub }) => {
+const CommentNode: React.FC<{ comment: RedditComment; depth?: number; onNavigateSub?: (sub: string) => void; textSize: 'small' | 'medium' | 'large' }> = memo(({ comment, depth = 0, onNavigateSub, textSize }) => {
   const [collapsed, setCollapsed] = useState(false);
   const [visibleReplies, setVisibleReplies] = useState(3); // Start with 3
   const data = comment.data;
@@ -250,7 +258,7 @@ const CommentNode: React.FC<{ comment: RedditComment; depth?: number; onNavigate
             <>
                 {/* Comment Body with Markdown */}
                 <div className="pl-1">
-                    <MarkdownRenderer content={data.body} onNavigateSub={onNavigateSub} />
+                    <MarkdownRenderer content={data.body} onNavigateSub={onNavigateSub} textSize={textSize} />
                 </div>
 
                 {/* Inline Media */}
@@ -274,7 +282,7 @@ const CommentNode: React.FC<{ comment: RedditComment; depth?: number; onNavigate
                     <div className="mt-1">
                         {replies.slice(0, visibleReplies).map((child) => {
                             if (child.kind === 't1') {
-                                return <CommentNode key={child.data.id} comment={child as RedditComment} depth={depth + 1} onNavigateSub={onNavigateSub} />;
+                                return <CommentNode key={child.data.id} comment={child as RedditComment} depth={depth + 1} onNavigateSub={onNavigateSub} textSize={textSize} />;
                             }
                             if (child.kind === 'more') {
                                 // 'more' objects handling
@@ -323,7 +331,7 @@ const CommentNode: React.FC<{ comment: RedditComment; depth?: number; onNavigate
   );
 });
 
-const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub }) => {
+const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, textSize }) => {
   const [comments, setComments] = useState<RedditComment[]>([]);
   const [loading, setLoading] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -493,7 +501,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub })
 
           {post.selftext && (
             <div className="mb-6">
-                <MarkdownRenderer content={post.selftext} onNavigateSub={onNavigateSub} />
+                <MarkdownRenderer content={post.selftext} onNavigateSub={onNavigateSub} textSize={textSize} />
             </div>
           )}
 
@@ -511,7 +519,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub })
           ) : (
             <div className="space-y-4 pb-12">
               {comments.map((comment) => (
-                <CommentNode key={comment.data.id} comment={comment} onNavigateSub={onNavigateSub} />
+                <CommentNode key={comment.data.id} comment={comment} onNavigateSub={onNavigateSub} textSize={textSize} />
               ))}
               {comments.length === 0 && (
                 <p className="text-stone-400 italic text-center">No comments found.</p>

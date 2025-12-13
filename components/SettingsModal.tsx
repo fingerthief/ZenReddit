@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, CircleAlert, Loader2, Shield, Key, Check, Search, Sparkles, Layers } from 'lucide-react';
+import { X, Save, CircleAlert, Loader2, Shield, Key, Check, Search, Sparkles, Layers, Type } from 'lucide-react';
 import { AIConfig, AIProvider } from '../types';
 
 interface SettingsModalProps {
@@ -10,15 +10,20 @@ interface SettingsModalProps {
   onSave: (config: AIConfig) => void;
   pageSize: number;
   onPageSizeChange: (size: number) => void;
+  textSize: 'small' | 'medium' | 'large';
+  onTextSizeChange: (size: 'small' | 'medium' | 'large') => void;
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, onSave, pageSize, onPageSizeChange }) => {
+const SettingsModal: React.FC<SettingsModalProps> = ({ 
+    isOpen, onClose, config, onSave, pageSize, onPageSizeChange, textSize, onTextSizeChange 
+}) => {
   const [provider] = useState<AIProvider>('openrouter');
   const [openRouterKey, setOpenRouterKey] = useState('');
   const [openRouterModel, setOpenRouterModel] = useState('google/gemini-2.0-flash-lite-preview-02-05:free');
   const [minZenScore, setMinZenScore] = useState(50);
   const [customInstructions, setCustomInstructions] = useState('');
   const [localPageSize, setLocalPageSize] = useState(pageSize);
+  const [localTextSize, setLocalTextSize] = useState(textSize);
   
   // New state for models
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
@@ -35,8 +40,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
       setMinZenScore(config.minZenScore ?? 50);
       setCustomInstructions(config.customInstructions || '');
       setLocalPageSize(pageSize);
+      setLocalTextSize(textSize);
     }
-  }, [isOpen, config, pageSize]);
+  }, [isOpen, config, pageSize, textSize]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -92,6 +98,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
       customInstructions
     });
     onPageSizeChange(localPageSize);
+    onTextSizeChange(localTextSize);
     onClose();
   };
 
@@ -154,30 +161,57 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
             
             <div className="border-t border-stone-100 dark:border-stone-800"></div>
 
-            {/* Page Size Section */}
+            {/* Display Options Section */}
             <div>
-                <div className="flex items-center gap-2 mb-3">
+                 <div className="flex items-center gap-2 mb-3">
                      <Layers size={16} className="text-stone-400" />
-                     <h3 className="text-sm font-semibold text-stone-800 dark:text-stone-200">Posts per Load</h3>
+                     <h3 className="text-sm font-semibold text-stone-800 dark:text-stone-200">Display Options</h3>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
-                    {[25, 50, 100].map((size) => (
-                        <button
-                            key={size}
-                            onClick={() => setLocalPageSize(size)}
-                            className={`px-3 py-2 text-sm font-medium rounded-lg border transition-all ${
-                                localPageSize === size
-                                    ? 'bg-stone-800 text-white dark:bg-stone-100 dark:text-stone-900 border-stone-800 dark:border-stone-100'
-                                    : 'bg-white dark:bg-stone-950 text-stone-600 dark:text-stone-400 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800'
-                            }`}
-                        >
-                            {size}
-                        </button>
-                    ))}
+                
+                <div className="space-y-4">
+                    {/* Page Size */}
+                    <div>
+                        <label className="text-xs font-medium text-stone-500 dark:text-stone-400 mb-2 block">Posts per Load</label>
+                        <div className="grid grid-cols-3 gap-3">
+                            {[25, 50, 100].map((size) => (
+                                <button
+                                    key={size}
+                                    onClick={() => setLocalPageSize(size)}
+                                    className={`px-3 py-2 text-sm font-medium rounded-lg border transition-all ${
+                                        localPageSize === size
+                                            ? 'bg-stone-800 text-white dark:bg-stone-100 dark:text-stone-900 border-stone-800 dark:border-stone-100'
+                                            : 'bg-white dark:bg-stone-950 text-stone-600 dark:text-stone-400 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800'
+                                    }`}
+                                >
+                                    {size}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Text Size */}
+                    <div>
+                        <div className="flex items-center gap-2 mb-2">
+                             <Type size={14} className="text-stone-400" />
+                             <label className="text-xs font-medium text-stone-500 dark:text-stone-400">Content Text Size</label>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                            {(['small', 'medium', 'large'] as const).map((size) => (
+                                <button
+                                    key={size}
+                                    onClick={() => setLocalTextSize(size)}
+                                    className={`px-3 py-2 text-sm font-medium rounded-lg border transition-all capitalize ${
+                                        localTextSize === size
+                                            ? 'bg-stone-800 text-white dark:bg-stone-100 dark:text-stone-900 border-stone-800 dark:border-stone-100'
+                                            : 'bg-white dark:bg-stone-950 text-stone-600 dark:text-stone-400 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800'
+                                    }`}
+                                >
+                                    {size}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                 </div>
-                <p className="text-xs text-stone-400 mt-2">
-                    Higher values load more posts but may be slower to analyze.
-                </p>
             </div>
 
             <div className="border-t border-stone-100 dark:border-stone-800"></div>

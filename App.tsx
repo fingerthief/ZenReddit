@@ -67,6 +67,9 @@ const App: React.FC = () => {
   // Page Size State
   const [pageSize, setPageSize] = useState<number>(() => loadFromStorage<number>('zen_page_size', 25));
 
+  // Text Size State
+  const [textSize, setTextSize] = useState<'small' | 'medium' | 'large'>(() => loadFromStorage<'small' | 'medium' | 'large'>('zen_text_size', 'medium'));
+
   // Data State
   const [posts, setPosts] = useState<FilteredPost[]>([]);
   const [loading, setLoading] = useState(false);
@@ -172,6 +175,11 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('zen_page_size', JSON.stringify(pageSize));
   }, [pageSize]);
+
+  // Persist Text Size
+  useEffect(() => {
+    localStorage.setItem('zen_text_size', JSON.stringify(textSize));
+  }, [textSize]);
 
   useEffect(() => {
     localStorage.setItem('zen_followed_subs', JSON.stringify(followedSubs));
@@ -721,6 +729,7 @@ const App: React.FC = () => {
             post={selectedPost} 
             onClose={handlePostClose}
             onNavigateSub={handleNavigateSub}
+            textSize={textSize}
         />
       )}
 
@@ -732,6 +741,8 @@ const App: React.FC = () => {
         onSave={handleSaveSettings}
         pageSize={pageSize}
         onPageSizeChange={setPageSize}
+        textSize={textSize}
+        onTextSizeChange={setTextSize}
       />
 
     </div>
