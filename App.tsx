@@ -5,7 +5,7 @@ import PostCard from './components/PostCard';
 import PostDetail from './components/PostDetail';
 import SettingsModal from './components/SettingsModal';
 import ScanningVisualizer from './components/ScanningVisualizer';
-import { FeedType, FilteredPost, RedditPostData, AIConfig, SortOption, TopTimeOption } from './types';
+import { FeedType, FilteredPost, RedditPostData, AIConfig, SortOption, TopTimeOption, CachedAnalysis } from './types';
 import { fetchFeed } from './services/redditService';
 import { analyzePostsForZen } from './services/geminiService';
 import { Loader2, RefreshCw, Menu, Moon, Sun, X, Settings, TriangleAlert, CloudOff, Search, Heart, Check, Flame, Clock, TrendingUp, Trophy } from 'lucide-react';
@@ -71,6 +71,9 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedPost, setSelectedPost] = useState<FilteredPost | null>(null);
   const [after, setAfter] = useState<string | null>(null);
+  
+  // Cache State
+  const [analysisCache, setAnalysisCache] = useState<Record<string, CachedAnalysis>>(() => loadFromStorage<Record<string, CachedAnalysis>>('zen_analysis_cache', {}));
   
   // UI State - Input
   const [searchInput, setSearchInput] = useState('');
@@ -181,6 +184,26 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('zen_ai_config', JSON.stringify(aiConfig));
   }, [aiConfig]);
+
+  // Cache Persistence & Cleanup
+  useEffect(() => {
+    try {
+        const now = Date.now();
+        const expiry = 7 * 24 * 60 * 60 * 1000; // 7 days
+        const cleaned: Record<string, CachedAnalysis> = {};
+        
+        Object.entries(analysisCache).forEach(([key, val]) => {
+            const cachedVal = val as CachedAnalysis;
+            if (now - cachedVal.timestamp < expiry) {
+                cleaned[key] = cachedVal;
+            }
+        });
+        
+        localStorage.setItem('zen_analysis_cache', JSON.stringify(cleaned));
+    } catch (e) {
+        console.warn("Failed to save analysis cache", e);
+    }
+  }, [analysisCache]);
 
   // Handle Browser Back Button for Modal
   useEffect(() => {
@@ -308,10 +331,44 @@ const App: React.FC = () => {
           return;
       }
 
-      if (!isLoadMore) setLoading(false);
-      setAnalyzing(true);
+      // --- Caching Logic ---
+      const now = Date.now();
+      const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 Days
+      const postsToAnalyze: RedditPostData[] = [];
+      const cachedResults: { id: string; isRageBait: boolean; zenScore: number; reason: string }[] = [];
 
-      const analysisResults = await analyzePostsForZen(rawPosts, aiConfig);
+      rawPosts.forEach(post => {
+          const cached = analysisCache[post.id];
+          if (cached && (now - cached.timestamp < CACHE_DURATION)) {
+              cachedResults.push(cached);
+          } else {
+              postsToAnalyze.push(post);
+          }
+      });
+
+      let newAnalysisResults: { id: string; isRageBait: boolean; zenScore: number; reason: string }[] = [];
+
+      if (postsToAnalyze.length > 0) {
+          if (!isLoadMore) setLoading(false);
+          setAnalyzing(true);
+
+          newAnalysisResults = await analyzePostsForZen(postsToAnalyze, aiConfig);
+          
+          setAnalysisCache(prev => {
+              const next = { ...prev };
+              newAnalysisResults.forEach(r => {
+                  next[r.id] = { ...r, timestamp: Date.now() };
+              });
+              return next;
+          });
+      } else {
+          // If everything is cached, ensure analyzing state is briefly shown then cleared in finally
+          // This keeps the flow consistent but fast
+          setAnalyzing(true); 
+      }
+
+      const analysisResults = [...cachedResults, ...newAnalysisResults];
+      // --- End Caching Logic ---
       
       const blockedInThisBatch = analysisResults.filter(r => r.isRageBait).length;
       if (blockedInThisBatch > 0) {
@@ -342,7 +399,7 @@ const App: React.FC = () => {
       setLoading(false);
       setAnalyzing(false);
     }
-  }, [currentFeed, currentSub, after, followedSubs, loading, analyzing, aiConfig, currentSearchQuery, currentSort, currentTopTime]);
+  }, [currentFeed, currentSub, after, followedSubs, loading, analyzing, aiConfig, currentSearchQuery, currentSort, currentTopTime, analysisCache]);
 
   // Initial load when feed or sort changes
   useEffect(() => {

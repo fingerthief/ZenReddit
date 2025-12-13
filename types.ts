@@ -1,5 +1,6 @@
 
 
+
 // Reddit API Types
 
 export interface RedditPostData {
@@ -112,4 +113,12 @@ export interface AIConfig {
   openRouterKey?: string;
   openRouterModel?: string;
   minZenScore?: number; // 0-100, threshold for filtering
+}
+
+export interface CachedAnalysis {
+  id: string;
+  isRageBait: boolean;
+  zenScore: number;
+  reason: string;
+  timestamp: number;
 }
