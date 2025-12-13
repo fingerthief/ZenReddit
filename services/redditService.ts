@@ -97,10 +97,11 @@ const fetchWithProxy = async (url: string) => {
 };
 
 export const fetchFeed = async (
-  type: 'popular' | 'all' | 'subreddit',
+  type: 'popular' | 'all' | 'subreddit' | 'search',
   subreddit?: string,
   after: string | null = null,
-  followedSubs: string[] = []
+  followedSubs: string[] = [],
+  searchQuery?: string
 ): Promise<{ posts: RedditPost[]; after: string | null }> => {
   let url = '';
   
@@ -112,6 +113,9 @@ export const fetchFeed = async (
     url = `${BASE_URL}/r/all.json?limit=15&raw_json=1`;
   } else if (type === 'subreddit' && subreddit) {
     url = `${BASE_URL}/r/${subreddit}/hot.json?limit=15&raw_json=1`;
+  } else if (type === 'search' && searchQuery) {
+    // Search Feed
+    url = `${BASE_URL}/search.json?q=${encodeURIComponent(searchQuery)}&limit=15&raw_json=1`;
   }
 
   if (after) {

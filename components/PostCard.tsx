@@ -5,10 +5,12 @@ import { formatDistanceToNow } from 'date-fns';
 
 interface PostCardProps {
   post: FilteredPost;
+  isSeen?: boolean;
   onClick: (post: FilteredPost) => void;
+  onNavigateSub?: (sub: string) => void;
 }
 
-const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
+const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNavigateSub }) => {
   const decodeHtml = (html: string) => {
     const txt = document.createElement("textarea");
     txt.innerHTML = html;
@@ -28,10 +30,12 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
                     (post.url && !!post.url.match(/\.(mp4|gifv|webm|mkv|mov)$/i)) ||
                     post.domain === 'v.redd.it';
 
+    const opacityClass = isSeen ? "opacity-60" : "opacity-100";
+
     // Case 1: Has a valid image thumbnail
     if (post.thumbnail && post.thumbnail.startsWith('http')) {
       return (
-        <div className="relative w-16 h-16 md:w-20 md:h-20 mr-3 md:mr-4 shrink-0 group rounded-md overflow-hidden bg-stone-200 dark:bg-stone-800">
+        <div className={`relative w-16 h-16 md:w-20 md:h-20 mr-3 md:mr-4 shrink-0 group rounded-md overflow-hidden bg-stone-200 dark:bg-stone-800 ${opacityClass}`}>
           <img 
             src={post.thumbnail} 
             alt="thumb" 
@@ -50,7 +54,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
     // Case 2: No thumbnail, check if video for icon placeholder
     if (isVideo) {
          return (
-            <div className="w-16 h-16 md:w-20 md:h-20 bg-stone-200 dark:bg-stone-800 rounded-md mr-3 md:mr-4 flex items-center justify-center shrink-0 text-stone-500 dark:text-stone-400 border border-stone-300 dark:border-stone-700">
+            <div className={`w-16 h-16 md:w-20 md:h-20 bg-stone-200 dark:bg-stone-800 rounded-md mr-3 md:mr-4 flex items-center justify-center shrink-0 text-stone-500 dark:text-stone-400 border border-stone-300 dark:border-stone-700 ${opacityClass}`}>
                 <CirclePlay size={28} />
             </div>
          );
@@ -58,7 +62,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
 
     // Case 3: Default Image icon
     return (
-        <div className="w-16 h-16 md:w-20 md:h-20 bg-stone-200 dark:bg-stone-800 rounded-md mr-3 md:mr-4 flex items-center justify-center shrink-0 text-stone-400 dark:text-stone-600">
+        <div className={`w-16 h-16 md:w-20 md:h-20 bg-stone-200 dark:bg-stone-800 rounded-md mr-3 md:mr-4 flex items-center justify-center shrink-0 text-stone-400 dark:text-stone-600 ${opacityClass}`}>
             <ImageIcon size={24} />
         </div>
     );
@@ -67,7 +71,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
   return (
     <div 
       onClick={() => onClick(post)}
-      className="bg-white dark:bg-stone-900 p-3 md:p-4 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 hover:shadow-md transition-all cursor-pointer mb-4"
+      className={`bg-white dark:bg-stone-900 p-3 md:p-4 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 hover:shadow-md transition-all cursor-pointer mb-4 ${isSeen ? 'bg-stone-50 dark:bg-stone-900/50' : ''}`}
     >
       <div className="flex">
         {/* Thumbnail for quick visual context */}
@@ -75,7 +79,17 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center text-xs text-stone-500 dark:text-stone-400 mb-1 space-x-2 overflow-hidden">
-            <span className="font-semibold text-stone-700 dark:text-stone-300 hover:underline truncate">r/{post.subreddit}</span>
+            <span 
+                className="font-semibold text-stone-700 dark:text-stone-300 hover:underline truncate cursor-pointer z-10"
+                onClick={(e) => {
+                    if (onNavigateSub) {
+                        e.stopPropagation();
+                        onNavigateSub(post.subreddit);
+                    }
+                }}
+            >
+                r/{post.subreddit}
+            </span>
             <span className="shrink-0">•</span>
             <span className="shrink-0">{formatDistanceToNow(new Date(post.created_utc * 1000))} ago</span>
             
@@ -91,7 +105,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
             )}
           </div>
 
-          <h3 className="text-base md:text-lg font-medium text-stone-800 dark:text-stone-100 leading-snug mb-2 line-clamp-2">
+          <h3 className={`text-base md:text-lg font-medium leading-snug mb-2 line-clamp-2 ${isSeen ? 'text-stone-400 dark:text-stone-500' : 'text-stone-800 dark:text-stone-100'}`}>
             {decodeHtml(post.title)}
           </h3>
 

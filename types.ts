@@ -86,7 +86,7 @@ export interface FilteredPost extends RedditPostData {
   zenScore?: number; // 0-100, where 100 is pure zen, 0 is pure rage
 }
 
-export type FeedType = 'popular' | 'all' | 'subreddit';
+export type FeedType = 'popular' | 'all' | 'subreddit' | 'search';
 
 export interface SubredditSubscription {
   name: string;

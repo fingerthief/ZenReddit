@@ -7,7 +7,7 @@ import ScanningVisualizer from './components/ScanningVisualizer';
 import { FeedType, FilteredPost, RedditPostData, AIConfig } from './types';
 import { fetchFeed } from './services/redditService';
 import { analyzePostsForZen } from './services/geminiService';
-import { Loader2, RefreshCw, Menu, Moon, Sun, X, Settings, TriangleAlert, CloudOff } from 'lucide-react';
+import { Loader2, RefreshCw, Menu, Moon, Sun, X, Settings, TriangleAlert, CloudOff, Search, Heart, Check } from 'lucide-react';
 
 // Helper to safely load from local storage
 const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
@@ -19,6 +19,8 @@ const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
     return defaultValue;
   }
 };
+
+const SEEN_EXPIRY_MS = 72 * 60 * 60 * 1000; // 72 hours
 
 const PostSkeleton = () => (
   <div className="bg-white dark:bg-stone-900 p-3 md:p-4 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 mb-4 animate-pulse">
@@ -56,6 +58,7 @@ const App: React.FC = () => {
     return saved;
   });
   const [currentSub, setCurrentSub] = useState<string | undefined>(() => loadFromStorage('zen_last_sub', undefined));
+  const [currentSearchQuery, setCurrentSearchQuery] = useState<string>(() => loadFromStorage('zen_last_search', ''));
   
   // Data State
   const [posts, setPosts] = useState<FilteredPost[]>([]);
@@ -64,6 +67,9 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedPost, setSelectedPost] = useState<FilteredPost | null>(null);
   const [after, setAfter] = useState<string | null>(null);
+  
+  // UI State - Input
+  const [searchInput, setSearchInput] = useState('');
 
   // User Preferences State
   // Removed default subscriptions logic
@@ -73,6 +79,38 @@ const App: React.FC = () => {
 
   const [blockedCount, setBlockedCount] = useState(() => loadFromStorage<number>('zen_blocked_count', 0));
   
+  // Seen Posts State with auto-cleanup logic
+  const [seenPosts, setSeenPosts] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem('zen_seen_posts');
+      if (!saved) return {};
+      
+      const parsed = JSON.parse(saved);
+      const now = Date.now();
+      const cleaned: Record<string, number> = {};
+      let hasChanges = false;
+      
+      // Filter out posts older than 72 hours
+      Object.entries(parsed).forEach(([id, timestamp]) => {
+         if (typeof timestamp === 'number' && (now - timestamp) < SEEN_EXPIRY_MS) {
+             cleaned[id] = timestamp;
+         } else {
+             hasChanges = true;
+         }
+      });
+      
+      // Update storage immediately if we cleaned up old entries
+      if (hasChanges) {
+          localStorage.setItem('zen_seen_posts', JSON.stringify(cleaned));
+      }
+      
+      return cleaned;
+    } catch (e) {
+      console.warn("Failed to parse seen posts", e);
+      return {};
+    }
+  });
+
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('zen_theme');
     if (saved === 'dark' || saved === 'light') return saved;
@@ -110,7 +148,10 @@ const App: React.FC = () => {
     } else {
         localStorage.removeItem('zen_last_sub');
     }
-  }, [currentFeed, currentSub]);
+    if (currentSearchQuery) {
+        localStorage.setItem('zen_last_search', JSON.stringify(currentSearchQuery));
+    }
+  }, [currentFeed, currentSub, currentSearchQuery]);
 
   // Persist Followed Subs
   useEffect(() => {
@@ -121,6 +162,15 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('zen_blocked_count', blockedCount.toString());
   }, [blockedCount]);
+
+  // Persist Seen Posts
+  useEffect(() => {
+    try {
+      localStorage.setItem('zen_seen_posts', JSON.stringify(seenPosts));
+    } catch (e) {
+      console.warn("Local storage full, cannot save seen posts history");
+    }
+  }, [seenPosts]);
 
   // Persist AI Config
   useEffect(() => {
@@ -173,6 +223,12 @@ const App: React.FC = () => {
         console.debug("History pushState failed (expected in some preview environments)", e);
       }
       setSelectedPost(post);
+
+      // Mark as seen with current timestamp
+      setSeenPosts(prev => ({
+          ...prev,
+          [post.id]: Date.now()
+      }));
   };
 
   const handlePostClose = () => {
@@ -188,6 +244,46 @@ const App: React.FC = () => {
       } else {
           setSelectedPost(null);
       }
+  };
+
+  const handleNavigate = (type: FeedType, sub?: string) => {
+    setCurrentFeed(type);
+    setCurrentSub(sub);
+    if (type !== 'search') {
+        setCurrentSearchQuery(''); // Clear search context if navigating away
+    }
+    setMobileMenuOpen(false);
+    // If a post is open, close it to show the feed
+    if (selectedPost) {
+        handlePostClose();
+    }
+  };
+
+  const handleNavigateSub = (sub: string) => {
+      handleNavigate('subreddit', sub);
+  };
+
+  // --- Search Logic ---
+  const handleSearchSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && searchInput.trim()) {
+        const query = searchInput.trim();
+        
+        // Check for direct subreddit navigation "r/name"
+        if (query.toLowerCase().startsWith('r/')) {
+            const subName = query.substring(2);
+            if (subName) {
+                handleNavigate('subreddit', subName);
+                setSearchInput(''); // Clear input after nav
+                return;
+            }
+        }
+
+        // Perform standard search
+        setCurrentSearchQuery(query);
+        setCurrentFeed('search');
+        setCurrentSub(undefined);
+        setMobileMenuOpen(false);
+    }
   };
 
   // --- Main Data Fetching Logic ---
@@ -209,7 +305,8 @@ const App: React.FC = () => {
         currentFeed, 
         currentSub, 
         isLoadMore ? after : null,
-        followedSubs
+        followedSubs,
+        currentSearchQuery // Pass search query
       );
 
       setAfter(newAfter);
@@ -264,7 +361,7 @@ const App: React.FC = () => {
       setLoading(false);
       setAnalyzing(false);
     }
-  }, [currentFeed, currentSub, after, followedSubs, loading, analyzing, aiConfig]);
+  }, [currentFeed, currentSub, after, followedSubs, loading, analyzing, aiConfig, currentSearchQuery]);
 
   // Initial load when feed changes
   useEffect(() => {
@@ -273,7 +370,7 @@ const App: React.FC = () => {
     setAfter(null);
     loadPosts(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentFeed, currentSub]); 
+  }, [currentFeed, currentSub, currentSearchQuery]); // Added currentSearchQuery to dependency
   
   // Infinite Scroll Observer
   useEffect(() => {
@@ -295,12 +392,6 @@ const App: React.FC = () => {
         if (currentTarget) observer.unobserve(currentTarget);
     };
   }, [loading, analyzing, posts.length, loadPosts, error]);
-
-  const handleNavigate = (type: FeedType, sub?: string) => {
-    setCurrentFeed(type);
-    setCurrentSub(sub);
-    setMobileMenuOpen(false);
-  };
 
   return (
     <div className="flex min-h-screen bg-stone-100 dark:bg-stone-950 font-sans text-stone-900 dark:text-stone-100 transition-colors">
@@ -385,13 +476,63 @@ const App: React.FC = () => {
             </div>
         )}
 
+        {/* Global Search Bar */}
+        <div className="mb-6 relative group">
+            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-stone-400 group-focus-within:text-emerald-500 transition-colors">
+                <Search size={20} />
+            </div>
+            <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={handleSearchSubmit}
+                placeholder="Search Reddit or type 'r/subreddit' to visit..."
+                className="w-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-xl py-3 pl-10 pr-4 text-stone-800 dark:text-stone-100 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 shadow-sm transition-all"
+            />
+            {searchInput && (
+                <button 
+                    onClick={() => setSearchInput('')} 
+                    className="absolute inset-y-0 right-3 flex items-center text-stone-400 hover:text-stone-600 dark:hover:text-stone-200"
+                >
+                    <X size={16} />
+                </button>
+            )}
+        </div>
+
         {/* Header Area */}
         <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-                <h2 className="text-3xl font-light text-stone-800 dark:text-stone-100 tracking-tight">
+                <h2 className="text-3xl font-light text-stone-800 dark:text-stone-100 tracking-tight flex items-center gap-3">
                     {currentFeed === 'popular' && "Popular on Reddit"}
                     {currentFeed === 'all' && "All of Reddit"}
-                    {currentFeed === 'subreddit' && `r/${currentSub}`}
+                    {currentFeed === 'subreddit' && (
+                        <>
+                            <span>r/{currentSub}</span>
+                            {currentSub && (
+                                <button
+                                    onClick={() => followedSubs.includes(currentSub) ? handleUnfollow(currentSub) : handleFollow(currentSub)}
+                                    className={`text-sm flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all ${
+                                        followedSubs.includes(currentSub)
+                                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-900/30 dark:hover:text-red-400"
+                                            : "bg-white text-stone-600 border-stone-200 dark:bg-stone-800 dark:text-stone-300 dark:border-stone-700 hover:border-emerald-400 hover:text-emerald-600 dark:hover:border-emerald-600"
+                                    }`}
+                                >
+                                    {followedSubs.includes(currentSub) ? (
+                                        <>
+                                            <Check size={14} />
+                                            <span>Joined</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Heart size={14} />
+                                            <span>Join</span>
+                                        </>
+                                    )}
+                                </button>
+                            )}
+                        </>
+                    )}
+                    {currentFeed === 'search' && `Results for "${currentSearchQuery}"`}
                 </h2>
                 <p className="text-stone-500 dark:text-stone-400 mt-1">
                     {analyzing ? "AI is purifying your stream..." : "Curated for calm."}
@@ -457,7 +598,9 @@ const App: React.FC = () => {
                 <PostCard 
                     key={post.id} 
                     post={post} 
+                    isSeen={!!seenPosts[post.id]}
                     onClick={handlePostClick} 
+                    onNavigateSub={handleNavigateSub}
                 />
             ))}
 
@@ -476,7 +619,8 @@ const App: React.FC = () => {
       {selectedPost && (
         <PostDetail 
             post={selectedPost} 
-            onClose={handlePostClose} 
+            onClose={handlePostClose}
+            onNavigateSub={handleNavigateSub}
         />
       )}
 

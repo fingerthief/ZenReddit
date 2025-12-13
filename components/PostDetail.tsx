@@ -10,6 +10,7 @@ import remarkGfm from 'remark-gfm';
 interface PostDetailProps {
   post: FilteredPost;
   onClose: () => void;
+  onNavigateSub?: (sub: string) => void;
 }
 
 // Helper to extract image URLs from text
@@ -27,19 +28,37 @@ const extractMediaFromText = (text: string) => {
 };
 
 // Markdown Renderer Component
-const MarkdownRenderer: React.FC<{ content: string }> = memo(({ content }) => {
-  // Pre-process to fix common Reddit markdown quirks if necessary
-  // For now, raw pass-through works surprisingly well with react-markdown
-  
+const MarkdownRenderer: React.FC<{ content: string; onNavigateSub?: (sub: string) => void }> = memo(({ content, onNavigateSub }) => {
   return (
     <div className="prose prose-stone dark:prose-invert prose-sm max-w-none break-words leading-relaxed opacity-90">
       <ReactMarkdown 
         remarkPlugins={[remarkGfm]}
         components={{
             // @ts-ignore
-            a: ({node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline" />,
+            a: ({node, href, ...props}) => {
+                // Intercept internal reddit links (e.g., /r/funny or r/funny)
+                const isSubLink = href?.match(/^(\/)?r\/([^/]+)/) || href?.match(/^https?:\/\/(www\.)?reddit\.com\/r\/([^/]+)/);
+                
+                if (isSubLink && onNavigateSub) {
+                     // isSubLink[2] contains the subreddit name in both regex patterns
+                     const subName = isSubLink[2];
+                     return (
+                        <a 
+                            {...props} 
+                            href={href} 
+                            onClick={(e) => {
+                                e.preventDefault();
+                                onNavigateSub(subName);
+                            }}
+                            className="text-emerald-600 dark:text-emerald-400 hover:underline font-medium cursor-pointer"
+                        />
+                     );
+                }
+
+                return <a {...props} href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline" />
+            },
             // @ts-ignore
-            img: ({node, ...props}) => <span className="hidden">Image hidden in markdown (shown in media grid)</span>, // Hide inline images in text to prevent dupes if we handle them separately, or let them render.
+            img: ({node, ...props}) => <span className="hidden">Image hidden in markdown (shown in media grid)</span>, 
             // @ts-ignore
             table: ({node, ...props}) => <div className="overflow-x-auto my-2"><table {...props} className="table-auto border-collapse border border-stone-200 dark:border-stone-700 w-full" /></div>,
             // @ts-ignore
@@ -54,7 +73,7 @@ const MarkdownRenderer: React.FC<{ content: string }> = memo(({ content }) => {
   );
 });
 
-const CommentNode: React.FC<{ comment: RedditComment; depth?: number }> = memo(({ comment, depth = 0 }) => {
+const CommentNode: React.FC<{ comment: RedditComment; depth?: number; onNavigateSub?: (sub: string) => void }> = memo(({ comment, depth = 0, onNavigateSub }) => {
   const [collapsed, setCollapsed] = useState(false);
   const [visibleReplies, setVisibleReplies] = useState(3); // Start with 3
   const data = comment.data;
@@ -118,7 +137,7 @@ const CommentNode: React.FC<{ comment: RedditComment; depth?: number }> = memo((
             <>
                 {/* Comment Body with Markdown */}
                 <div className="pl-1">
-                    <MarkdownRenderer content={data.body} />
+                    <MarkdownRenderer content={data.body} onNavigateSub={onNavigateSub} />
                 </div>
 
                 {/* Inline Media */}
@@ -142,7 +161,7 @@ const CommentNode: React.FC<{ comment: RedditComment; depth?: number }> = memo((
                     <div className="mt-1">
                         {replies.slice(0, visibleReplies).map((child) => {
                             if (child.kind === 't1') {
-                                return <CommentNode key={child.data.id} comment={child as RedditComment} depth={depth + 1} />;
+                                return <CommentNode key={child.data.id} comment={child as RedditComment} depth={depth + 1} onNavigateSub={onNavigateSub} />;
                             }
                             if (child.kind === 'more') {
                                 // 'more' objects handling
@@ -191,7 +210,7 @@ const CommentNode: React.FC<{ comment: RedditComment; depth?: number }> = memo((
   );
 });
 
-const PostDetail: React.FC<PostDetailProps> = ({ post, onClose }) => {
+const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub }) => {
   const [comments, setComments] = useState<RedditComment[]>([]);
   const [loading, setLoading] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -283,7 +302,12 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose }) => {
              </button>
              
              <div className="flex flex-col min-w-0">
-                 <span className="font-bold text-stone-800 dark:text-stone-200 truncate text-sm md:text-base">r/{post.subreddit}</span>
+                 <button 
+                    onClick={() => onNavigateSub && onNavigateSub(post.subreddit)}
+                    className="font-bold text-stone-800 dark:text-stone-200 truncate text-sm md:text-base hover:text-emerald-600 dark:hover:text-emerald-400 text-left transition-colors"
+                 >
+                    r/{post.subreddit}
+                 </button>
                  <span className="text-xs text-stone-500 dark:text-stone-400 truncate">u/{post.author}</span>
              </div>
           </div>
@@ -301,7 +325,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose }) => {
 
           {post.selftext && (
             <div className="mb-6">
-                <MarkdownRenderer content={post.selftext} />
+                <MarkdownRenderer content={post.selftext} onNavigateSub={onNavigateSub} />
             </div>
           )}
 
@@ -319,7 +343,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose }) => {
           ) : (
             <div className="space-y-4 pb-12">
               {comments.map((comment) => (
-                <CommentNode key={comment.data.id} comment={comment} />
+                <CommentNode key={comment.data.id} comment={comment} onNavigateSub={onNavigateSub} />
               ))}
               {comments.length === 0 && (
                 <p className="text-stone-400 italic text-center">No comments found.</p>
