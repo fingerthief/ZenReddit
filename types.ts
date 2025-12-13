@@ -104,6 +104,11 @@ export interface GalleryItem {
   src: string;
   caption?: string;
   id?: string | number;
+  type?: 'image' | 'video';
+  videoSources?: {
+    hls?: string;
+    mp4?: string;
+  };
 }
 
 // Sorting Types

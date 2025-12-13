@@ -26,8 +26,49 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
                       (post.url && !!post.url.match(/\.(mp4|gifv|webm|mkv|mov)$/i)) ||
                       post.domain === 'v.redd.it';
 
-      // If it's a video, let the click bubble up to open PostDetail (which has the video player)
-      if (isVideo) return;
+      if (isVideo) {
+          e.stopPropagation();
+          if (!onImageClick) return;
+
+          let hls = post.secure_media?.reddit_video?.hls_url;
+          let mp4 = post.secure_media?.reddit_video?.fallback_url;
+
+          if (!hls && !mp4 && post.preview?.reddit_video_preview) {
+              hls = post.preview.reddit_video_preview.hls_url;
+              mp4 = post.preview.reddit_video_preview.fallback_url;
+          }
+
+          if (!hls && !mp4 && post.url) {
+               // Direct link handling
+               if (post.url.match(/\.(mp4|webm|mov)$/i)) {
+                   mp4 = post.url;
+               } else if (post.url.match(/\.gifv$/i)) {
+                   mp4 = post.url.replace(/\.gifv$/i, '.mp4');
+               }
+          }
+          
+          // Fallback to URL if it looks like a video link but we haven't extracted it yet
+          if (!mp4 && !hls && (post.url.includes('.mp4') || post.domain === 'v.redd.it')) {
+              mp4 = post.url;
+          }
+
+          onImageClick([{
+              src: post.thumbnail && post.thumbnail.startsWith('http') ? post.thumbnail : '',
+              caption: post.title,
+              id: post.id,
+              type: 'video',
+              videoSources: {
+                  hls,
+                  mp4
+              }
+          }], 0);
+          return;
+      }
+      
+      // Stop propagation for anything that isn't a video to prevent opening detail view
+      e.stopPropagation();
+
+      if (!onImageClick) return;
 
       // --- Gallery Detection ---
       
@@ -42,14 +83,14 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
                   return {
                       src,
                       caption: item.caption,
-                      id: item.id
+                      id: item.id,
+                      type: 'image'
                   };
               }
               return null;
           }).filter((i): i is GalleryItem => i !== null);
 
-          if (items.length > 0 && onImageClick) {
-              e.stopPropagation();
+          if (items.length > 0) {
               onImageClick(items, 0);
               return;
           }
@@ -70,11 +111,15 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
       const hasImageExtension = urlNoParams.match(/\.(jpg|jpeg|png|gif|webp)$/i);
       const isRedditImage = post.domain?.includes('i.redd.it');
       
+      // If it has a preview, we treat it as an image we can view, even if the main URL is something else (like an imgur album link)
       const isImage = hasImageExtension || isRedditImage || hasPreview;
 
-      if (isImage && onImageClick) {
-          e.stopPropagation();
-          onImageClick([{ src: imageUrl, caption: post.title }], 0);
+      if (isImage) {
+          onImageClick([{ 
+            src: imageUrl, 
+            caption: post.title,
+            type: 'image' 
+          }], 0);
       }
   };
 
@@ -120,7 +165,10 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
     // Case 2: No thumbnail, check if video for icon placeholder
     if (isVideo) {
          return (
-            <div className={`w-16 h-16 md:w-20 md:h-20 bg-stone-200 dark:bg-stone-800 rounded-md mr-3 md:mr-4 flex items-center justify-center shrink-0 text-stone-500 dark:text-stone-400 border border-stone-300 dark:border-stone-700 ${opacityClass}`}>
+            <div 
+                onClick={handleThumbnailClick}
+                className={`w-16 h-16 md:w-20 md:h-20 bg-stone-200 dark:bg-stone-800 rounded-md mr-3 md:mr-4 flex items-center justify-center shrink-0 text-stone-500 dark:text-stone-400 border border-stone-300 dark:border-stone-700 ${opacityClass} cursor-pointer hover:bg-stone-300 dark:hover:bg-stone-700 transition-colors`}
+            >
                 <CirclePlay size={28} />
             </div>
          );

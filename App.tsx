@@ -6,10 +6,11 @@ import PostDetail from './components/PostDetail';
 import ImageViewer from './components/ImageViewer';
 import SettingsModal from './components/SettingsModal';
 import ScanningVisualizer from './components/ScanningVisualizer';
+import QuickSubSwitcher from './components/QuickSubSwitcher';
 import { FeedType, FilteredPost, RedditPostData, AIConfig, SortOption, TopTimeOption, CachedAnalysis, GalleryItem } from './types';
 import { fetchFeed } from './services/redditService';
 import { analyzePostsForZen, AnalysisResult } from './services/aiService';
-import { Loader2, RefreshCw, Menu, CloudOff, TriangleAlert } from 'lucide-react';
+import { Loader2, RefreshCw, Menu, CloudOff, TriangleAlert, Search, ChevronDown } from 'lucide-react';
 
 const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
   try {
@@ -58,6 +59,9 @@ const App: React.FC = () => {
   const [currentSearchQuery, setCurrentSearchQuery] = useState<string>(() => loadFromStorage('zen_last_search', ''));
   const [navHistory, setNavHistory] = useState<{feed: FeedType, sub?: string, query?: string}[]>([]);
   
+  // Local UI state for search input
+  const [searchInput, setSearchInput] = useState('');
+
   // Sorting State
   const [currentSort, setCurrentSort] = useState<SortOption>(() => loadFromStorage<SortOption>('zen_sort', 'hot'));
   const [currentTopTime, setCurrentTopTime] = useState<TopTimeOption>(() => loadFromStorage<TopTimeOption>('zen_top_time', 'day'));
@@ -192,6 +196,15 @@ const App: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [selectedPost, viewingGallery]);
 
+  // Sync search input with currentSearchQuery when it changes externally
+  useEffect(() => {
+    if (currentFeed === 'search') {
+      setSearchInput(currentSearchQuery);
+    } else {
+      setSearchInput('');
+    }
+  }, [currentSearchQuery, currentFeed]);
+
   // --- Handlers ---
   const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
   const handleFollow = (sub: string) => !followedSubs.includes(sub) && setFollowedSubs(prev => [...prev, sub]);
@@ -219,18 +232,29 @@ const App: React.FC = () => {
       else setViewingGallery(null);
   };
 
-  const handleNavigate = (type: FeedType, sub?: string) => {
-    if (type === currentFeed && sub === currentSub) {
+  const handleNavigate = (type: FeedType, sub?: string, query?: string) => {
+    if (type === currentFeed && sub === currentSub && query === currentSearchQuery) {
         setMobileMenuOpen(false);
         return;
     }
     setNavHistory(prev => [...prev, { feed: currentFeed, sub: currentSub, query: currentSearchQuery }]);
     setCurrentFeed(type);
     setCurrentSub(sub);
-    if (type !== 'search') setCurrentSearchQuery('');
+    if (type === 'search' && query) {
+        setCurrentSearchQuery(query);
+    } else if (type !== 'search') {
+        setCurrentSearchQuery('');
+    }
     setMobileMenuOpen(false);
     if (selectedPost) handlePostClose();
     setViewingGallery(null);
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchInput.trim()) {
+        handleNavigate('search', undefined, searchInput.trim());
+    }
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -251,9 +275,7 @@ const App: React.FC = () => {
           if (dx > 80 && dy < 60 && navHistory.length > 0) {
               const prev = navHistory[navHistory.length - 1];
               setNavHistory(prevH => prevH.slice(0, -1));
-              setCurrentFeed(prev.feed);
-              setCurrentSub(prev.sub);
-              if (prev.query !== undefined) setCurrentSearchQuery(prev.query);
+              handleNavigate(prev.feed, prev.sub, prev.query);
           }
       }
   };
@@ -418,39 +440,62 @@ const App: React.FC = () => {
 
       {/* Main Content */}
       <main className="flex-1 w-full max-w-3xl mx-auto px-4 pt-16 md:pt-8 md:px-8 pb-8 min-h-screen">
+         
+         {/* Search Bar */}
+         <form onSubmit={handleSearchSubmit} className="relative mb-4 group">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-5 w-5 text-stone-400 group-focus-within:text-emerald-500 transition-colors" />
+            </div>
+            <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search Reddit..."
+                className="block w-full pl-10 pr-3 py-2.5 border border-stone-200 dark:border-stone-800 rounded-xl leading-5 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all shadow-sm"
+            />
+         </form>
+
          {/* Toolbar */}
          <div className="flex items-center justify-between mb-6">
-             <div className="flex items-center space-x-2 overflow-x-auto pb-2 hide-scrollbar">
-                 <select 
-                    value={currentSort} 
-                    onChange={(e) => setCurrentSort(e.target.value as SortOption)}
-                    className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg px-3 py-1.5 text-sm font-medium focus:outline-none cursor-pointer"
-                 >
-                    <option value="hot">Hot</option>
-                    <option value="new">New</option>
-                    <option value="top">Top</option>
-                    <option value="rising">Rising</option>
-                 </select>
+             <div className="flex items-center gap-2 overflow-x-auto pb-2 hide-scrollbar">
+                 {/* Sort Buttons */}
+                 {(['hot', 'new', 'top', 'rising'] as SortOption[]).map((option) => (
+                    <button
+                      key={option}
+                      onClick={() => setCurrentSort(option)}
+                      className={`px-4 py-2 rounded-full text-sm font-medium transition-all capitalize whitespace-nowrap ${
+                        currentSort === option 
+                          ? 'bg-stone-800 text-white dark:bg-stone-100 dark:text-stone-900 shadow-md' 
+                          : 'bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-400 border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800'
+                      }`}
+                    >
+                      {option}
+                    </button>
+                 ))}
 
+                 {/* Top Time Select (Conditional) */}
                  {currentSort === 'top' && (
-                     <select 
-                        value={currentTopTime} 
-                        onChange={(e) => setCurrentTopTime(e.target.value as TopTimeOption)}
-                        className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg px-3 py-1.5 text-sm font-medium focus:outline-none cursor-pointer"
-                     >
-                        <option value="hour">Now</option>
-                        <option value="day">Today</option>
-                        <option value="week">This Week</option>
-                        <option value="month">This Month</option>
-                        <option value="year">This Year</option>
-                        <option value="all">All Time</option>
-                     </select>
+                    <div className="relative shrink-0 animate-in fade-in slide-in-from-left-2 duration-200">
+                       <select 
+                          value={currentTopTime} 
+                          onChange={(e) => setCurrentTopTime(e.target.value as TopTimeOption)}
+                          className="appearance-none bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-full pl-4 pr-8 py-2 text-sm font-medium text-stone-700 dark:text-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors"
+                       >
+                          <option value="hour">Now</option>
+                          <option value="day">Today</option>
+                          <option value="week">Week</option>
+                          <option value="month">Month</option>
+                          <option value="year">Year</option>
+                          <option value="all">All Time</option>
+                       </select>
+                       <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-500 pointer-events-none" />
+                    </div>
                  )}
              </div>
 
              <button 
                 onClick={() => loadPosts(false)} 
-                className={`p-2 rounded-full hover:bg-stone-200 dark:hover:bg-stone-800 transition-colors ${loading ? 'animate-spin' : ''}`}
+                className={`p-2 rounded-full hover:bg-stone-200 dark:hover:bg-stone-800 transition-colors shrink-0 ml-2 ${loading ? 'animate-spin' : ''}`}
                 title="Refresh"
              >
                  <RefreshCw size={20} className="text-stone-500" />
@@ -505,6 +550,14 @@ const App: React.FC = () => {
              </>
          )}
       </main>
+
+      {/* Floating Action Button for Mobile Subreddit Switching */}
+      <QuickSubSwitcher 
+        followedSubs={followedSubs}
+        onNavigate={handleNavigate}
+        currentFeed={currentFeed}
+        currentSub={currentSub}
+      />
 
       {/* Modals */}
       {selectedPost && (

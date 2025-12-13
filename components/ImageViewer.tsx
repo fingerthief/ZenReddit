@@ -1,7 +1,8 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, Download, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Images } from 'lucide-react';
+import { X, Download, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Images, CirclePlay } from 'lucide-react';
 import { GalleryItem } from '../types';
+import Hls from 'hls.js';
 
 interface ImageViewerProps {
   items: GalleryItem[];
@@ -16,6 +17,8 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ items, initialIndex = 0, onCl
   const [isDragging, setIsDragging] = useState(false);
   
   const containerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
   
   // Gesture state refs
   const lastTouchRef = useRef<{ x: number; y: number } | null>(null);
@@ -24,12 +27,48 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ items, initialIndex = 0, onCl
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const currentItem = items[currentIndex];
+  const isVideo = currentItem.type === 'video';
 
   // Reset zoom on index change
   useEffect(() => {
     setScale(1);
     setPosition({ x: 0, y: 0 });
   }, [currentIndex]);
+
+  // Video Cleanup on unmount or index change
+  useEffect(() => {
+    return () => {
+        if (hlsRef.current) {
+            hlsRef.current.destroy();
+            hlsRef.current = null;
+        }
+    };
+  }, [currentIndex]);
+
+  // Video Initialization
+  useEffect(() => {
+      if (!isVideo || !videoRef.current || !currentItem.videoSources) return;
+      
+      const { hls: hlsUrl, mp4: mp4Url } = currentItem.videoSources;
+      const videoEl = videoRef.current;
+
+      if (hlsRef.current) {
+          hlsRef.current.destroy();
+          hlsRef.current = null;
+      }
+
+      if (Hls.isSupported() && hlsUrl) {
+          const hls = new Hls();
+          hls.loadSource(hlsUrl);
+          hls.attachMedia(videoEl);
+          hlsRef.current = hls;
+      } else if (videoEl.canPlayType('application/vnd.apple.mpegurl') && hlsUrl) {
+          // Native HLS (Safari)
+          videoEl.src = hlsUrl;
+      } else if (mp4Url) {
+          videoEl.src = mp4Url;
+      }
+  }, [currentIndex, isVideo, currentItem]);
 
   const handleNext = useCallback(() => {
     if (currentIndex < items.length - 1) setCurrentIndex(c => c + 1);
@@ -39,8 +78,9 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ items, initialIndex = 0, onCl
     if (currentIndex > 0) setCurrentIndex(c => c - 1);
   }, [currentIndex]);
 
-  const handleZoomIn = () => setScale(s => Math.min(s + 0.5, 4));
+  const handleZoomIn = () => !isVideo && setScale(s => Math.min(s + 0.5, 4));
   const handleZoomOut = () => {
+    if (isVideo) return;
     setScale(s => {
         const next = s - 0.5;
         if (next <= 1) setPosition({ x: 0, y: 0 });
@@ -60,6 +100,11 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ items, initialIndex = 0, onCl
   }, [handleNext, handlePrev, onClose]);
 
   const handleDownload = async () => {
+    if (isVideo && currentItem.videoSources?.mp4) {
+        window.open(currentItem.videoSources.mp4, '_blank');
+        return;
+    }
+    
     try {
         const response = await fetch(currentItem.src);
         const blob = await response.blob();
@@ -86,6 +131,8 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ items, initialIndex = 0, onCl
   };
 
   const onTouchStart = (e: React.TouchEvent) => {
+      if (isVideo) return; // Disable pan/zoom for video
+
       if (e.touches.length === 1) {
           lastTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
           swipeStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -98,6 +145,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ items, initialIndex = 0, onCl
   };
 
   const onTouchMove = (e: React.TouchEvent) => {
+      if (isVideo) return; 
       e.preventDefault(); 
 
       // Pan Logic (only if zoomed in)
@@ -121,6 +169,8 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ items, initialIndex = 0, onCl
   };
 
   const onTouchEnd = (e: React.TouchEvent) => {
+      if (isVideo) return;
+
       setIsDragging(false);
       lastTouchRef.current = null;
       initialPinchDistRef.current = null;
@@ -145,6 +195,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ items, initialIndex = 0, onCl
   };
 
   const handleDoubleTap = () => {
+      if (isVideo) return;
       if (scale > 1) {
           setScale(1);
           setPosition({ x: 0, y: 0 });
@@ -180,14 +231,14 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ items, initialIndex = 0, onCl
                  <button 
                     onClick={handleDownload}
                     className="p-2 bg-black/40 text-white rounded-full backdrop-blur-md hover:bg-white/20 transition-colors pointer-events-auto"
-                    title="Download"
+                    title={isVideo ? "Open in New Tab" : "Download"}
                 >
                     <Download size={24} />
                 </button>
             </div>
         </div>
 
-        {/* Image Container */}
+        {/* Media Container */}
         <div 
             className="w-full h-full flex items-center justify-center touch-none relative"
             onTouchStart={onTouchStart}
@@ -195,21 +246,44 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ items, initialIndex = 0, onCl
             onTouchEnd={onTouchEnd}
             onDoubleClick={handleDoubleTap}
         >
-            <img 
-                key={currentItem.src}
-                src={currentItem.src} 
-                alt={currentItem.caption || "Full size"}
-                className="max-w-full max-h-full object-contain transition-transform duration-75 ease-out select-none"
-                style={{ 
-                    transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-                    cursor: scale > 1 ? 'grab' : 'default'
-                }}
-                draggable={false}
-            />
+            {isVideo ? (
+                <video
+                    ref={videoRef}
+                    className="max-w-full max-h-full"
+                    controls
+                    autoPlay
+                    playsInline
+                    poster={currentItem.src}
+                    onClick={(e) => e.stopPropagation()} // Allow clicking video controls without closing modal
+                >
+                    <source src={currentItem.videoSources?.mp4} type="video/mp4" />
+                    Your browser does not support the video tag.
+                </video>
+            ) : (
+                <img 
+                    key={currentItem.src}
+                    src={currentItem.src} 
+                    alt={currentItem.caption || "Full size"}
+                    className="max-w-full max-h-full object-contain transition-transform duration-75 ease-out select-none"
+                    style={{ 
+                        transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                        cursor: scale > 1 ? 'grab' : 'default'
+                    }}
+                    draggable={false}
+                />
+            )}
             
             {/* Caption */}
-            {currentItem.caption && scale === 1 && (
+            {currentItem.caption && scale === 1 && !isVideo && (
                 <div className="absolute bottom-20 left-4 right-4 text-center pointer-events-none">
+                    <span className="inline-block bg-black/60 backdrop-blur-md text-white px-4 py-2 rounded-lg text-sm">
+                        {currentItem.caption}
+                    </span>
+                </div>
+            )}
+             {/* Video Caption */}
+             {currentItem.caption && isVideo && (
+                <div className="absolute bottom-24 left-4 right-4 text-center pointer-events-none z-0">
                     <span className="inline-block bg-black/60 backdrop-blur-md text-white px-4 py-2 rounded-lg text-sm">
                         {currentItem.caption}
                     </span>
@@ -221,7 +295,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ items, initialIndex = 0, onCl
         {currentIndex > 0 && (
             <button 
                 onClick={handlePrev}
-                className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-black/30 hover:bg-black/50 text-white rounded-full transition-all hidden md:block"
+                className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-black/30 hover:bg-black/50 text-white rounded-full transition-all hidden md:block z-20"
             >
                 <ChevronLeft size={32} />
             </button>
@@ -229,32 +303,34 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ items, initialIndex = 0, onCl
         {currentIndex < items.length - 1 && (
             <button 
                 onClick={handleNext}
-                className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-black/30 hover:bg-black/50 text-white rounded-full transition-all hidden md:block"
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-black/30 hover:bg-black/50 text-white rounded-full transition-all hidden md:block z-20"
             >
                 <ChevronRight size={32} />
             </button>
         )}
 
-        {/* Zoom Controls (Bottom) */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-4 pointer-events-auto z-10">
-            <div className="flex bg-stone-900/80 backdrop-blur-md rounded-full px-2 py-1 border border-stone-800 shadow-lg">
-                <button 
-                    onClick={handleZoomOut}
-                    className="p-3 text-stone-300 hover:text-white disabled:opacity-50"
-                    disabled={scale <= 1}
-                >
-                    <ZoomOut size={20} />
-                </button>
-                <div className="w-px bg-stone-700 my-2"></div>
-                <button 
-                    onClick={handleZoomIn}
-                    className="p-3 text-stone-300 hover:text-white disabled:opacity-50"
-                    disabled={scale >= 4}
-                >
-                    <ZoomIn size={20} />
-                </button>
+        {/* Zoom Controls (Bottom) - Only for images */}
+        {!isVideo && (
+            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-4 pointer-events-auto z-10">
+                <div className="flex bg-stone-900/80 backdrop-blur-md rounded-full px-2 py-1 border border-stone-800 shadow-lg">
+                    <button 
+                        onClick={handleZoomOut}
+                        className="p-3 text-stone-300 hover:text-white disabled:opacity-50"
+                        disabled={scale <= 1}
+                    >
+                        <ZoomOut size={20} />
+                    </button>
+                    <div className="w-px bg-stone-700 my-2"></div>
+                    <button 
+                        onClick={handleZoomIn}
+                        className="p-3 text-stone-300 hover:text-white disabled:opacity-50"
+                        disabled={scale >= 4}
+                    >
+                        <ZoomIn size={20} />
+                    </button>
+                </div>
             </div>
-        </div>
+        )}
     </div>
   );
 };

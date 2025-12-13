@@ -77,12 +77,37 @@
         background: #78716c; 
       }
       
+      /* Hide scrollbar utilities */
+      .hide-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .hide-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      
       @keyframes progress-indeterminate {
         0% { transform: translateX(-100%); }
         100% { transform: translateX(300%); }
       }
       .animate-progress-indeterminate {
         animation: progress-indeterminate 1.5s infinite cubic-bezier(0.4, 0.0, 0.2, 1);
+      }
+
+      /* Animations for Mobile Sheet */
+      @keyframes slide-up {
+        from { transform: translateY(100%); }
+        to { transform: translateY(0); }
+      }
+      .animate-slide-up {
+        animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      @keyframes fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      .animate-fade-in {
+        animation: fade-in 0.2s ease-out;
       }
     </style>
 <script type="importmap">
