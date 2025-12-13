@@ -100,6 +100,10 @@ export interface SubredditSubscription {
   icon?: string;
 }
 
+// Sorting Types
+export type SortOption = 'hot' | 'new' | 'top' | 'rising';
+export type TopTimeOption = 'hour' | 'day' | 'week' | 'month' | 'year' | 'all';
+
 // AI Configuration Types
 export type AIProvider = 'openrouter';
 

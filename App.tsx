@@ -1,13 +1,14 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import PostCard from './components/PostCard';
 import PostDetail from './components/PostDetail';
 import SettingsModal from './components/SettingsModal';
 import ScanningVisualizer from './components/ScanningVisualizer';
-import { FeedType, FilteredPost, RedditPostData, AIConfig } from './types';
+import { FeedType, FilteredPost, RedditPostData, AIConfig, SortOption, TopTimeOption } from './types';
 import { fetchFeed } from './services/redditService';
 import { analyzePostsForZen } from './services/geminiService';
-import { Loader2, RefreshCw, Menu, Moon, Sun, X, Settings, TriangleAlert, CloudOff, Search, Heart, Check } from 'lucide-react';
+import { Loader2, RefreshCw, Menu, Moon, Sun, X, Settings, TriangleAlert, CloudOff, Search, Heart, Check, Flame, Clock, TrendingUp, Trophy } from 'lucide-react';
 
 // Helper to safely load from local storage
 const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
@@ -49,7 +50,6 @@ const App: React.FC = () => {
   // --- State Initialization (Lazy loading from LocalStorage) ---
   
   // Navigation State
-  // Default to 'popular' as the main feed
   const [currentFeed, setCurrentFeed] = useState<FeedType>(() => {
     const saved = loadFromStorage('zen_last_feed', 'popular');
     // Migration: If user had 'home' stored, switch to 'popular'
@@ -60,6 +60,10 @@ const App: React.FC = () => {
   const [currentSub, setCurrentSub] = useState<string | undefined>(() => loadFromStorage('zen_last_sub', undefined));
   const [currentSearchQuery, setCurrentSearchQuery] = useState<string>(() => loadFromStorage('zen_last_search', ''));
   
+  // Sorting State
+  const [currentSort, setCurrentSort] = useState<SortOption>(() => loadFromStorage<SortOption>('zen_sort', 'hot'));
+  const [currentTopTime, setCurrentTopTime] = useState<TopTimeOption>(() => loadFromStorage<TopTimeOption>('zen_top_time', 'day'));
+
   // Data State
   const [posts, setPosts] = useState<FilteredPost[]>([]);
   const [loading, setLoading] = useState(false);
@@ -72,14 +76,13 @@ const App: React.FC = () => {
   const [searchInput, setSearchInput] = useState('');
 
   // User Preferences State
-  // Removed default subscriptions logic
   const [followedSubs, setFollowedSubs] = useState<string[]>(() => {
     return loadFromStorage<string[]>('zen_followed_subs', []);
   });
 
   const [blockedCount, setBlockedCount] = useState(() => loadFromStorage<number>('zen_blocked_count', 0));
   
-  // Seen Posts State with auto-cleanup logic
+  // Seen Posts State
   const [seenPosts, setSeenPosts] = useState<Record<string, number>>(() => {
     try {
       const saved = localStorage.getItem('zen_seen_posts');
@@ -99,7 +102,6 @@ const App: React.FC = () => {
          }
       });
       
-      // Update storage immediately if we cleaned up old entries
       if (hasChanges) {
           localStorage.setItem('zen_seen_posts', JSON.stringify(cleaned));
       }
@@ -130,7 +132,6 @@ const App: React.FC = () => {
 
   // --- Effects for Persistence ---
 
-  // Apply Theme
   useEffect(() => {
     localStorage.setItem('zen_theme', theme);
     if (theme === 'dark') {
@@ -140,7 +141,6 @@ const App: React.FC = () => {
     }
   }, [theme]);
 
-  // Persist Navigation
   useEffect(() => {
     localStorage.setItem('zen_last_feed', JSON.stringify(currentFeed));
     if (currentSub) {
@@ -153,17 +153,23 @@ const App: React.FC = () => {
     }
   }, [currentFeed, currentSub, currentSearchQuery]);
 
-  // Persist Followed Subs
+  // Persist Sorting
+  useEffect(() => {
+    localStorage.setItem('zen_sort', JSON.stringify(currentSort));
+  }, [currentSort]);
+
+  useEffect(() => {
+    localStorage.setItem('zen_top_time', JSON.stringify(currentTopTime));
+  }, [currentTopTime]);
+
   useEffect(() => {
     localStorage.setItem('zen_followed_subs', JSON.stringify(followedSubs));
   }, [followedSubs]);
 
-  // Persist Blocked Count
   useEffect(() => {
     localStorage.setItem('zen_blocked_count', blockedCount.toString());
   }, [blockedCount]);
 
-  // Persist Seen Posts
   useEffect(() => {
     try {
       localStorage.setItem('zen_seen_posts', JSON.stringify(seenPosts));
@@ -172,7 +178,6 @@ const App: React.FC = () => {
     }
   }, [seenPosts]);
 
-  // Persist AI Config
   useEffect(() => {
     localStorage.setItem('zen_ai_config', JSON.stringify(aiConfig));
   }, [aiConfig]);
@@ -180,14 +185,10 @@ const App: React.FC = () => {
   // Handle Browser Back Button for Modal
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
-      // If the user presses back and we have a post open, close it.
-      // We rely on the fact that opening a post pushed a state.
-      // If we are here, we popped that state.
       if (selectedPost) {
         setSelectedPost(null);
       }
     };
-
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, [selectedPost]);
@@ -211,20 +212,15 @@ const App: React.FC = () => {
 
   const handleSaveSettings = (config: AIConfig) => {
       setAiConfig(config);
-      // Logic handled by effect now
   };
 
   const handlePostClick = (post: FilteredPost) => {
-      // Push state so back button works on mobile
       try {
-        // Use null for URL to avoid security errors in blob/iframe contexts
         window.history.pushState({ postOpen: true }, '', null);
       } catch (e) {
-        console.debug("History pushState failed (expected in some preview environments)", e);
+        console.debug("History pushState failed", e);
       }
       setSelectedPost(post);
-
-      // Mark as seen with current timestamp
       setSeenPosts(prev => ({
           ...prev,
           [post.id]: Date.now()
@@ -232,13 +228,10 @@ const App: React.FC = () => {
   };
 
   const handlePostClose = () => {
-      // If we are closing via UI button, we should go back to pop the history state
-      // This prevents the user from having to click back twice later.
       if (window.history.state?.postOpen) {
           try {
             window.history.back();
           } catch(e) {
-             // Fallback if history.back fails
              setSelectedPost(null);
           }
       } else {
@@ -250,10 +243,9 @@ const App: React.FC = () => {
     setCurrentFeed(type);
     setCurrentSub(sub);
     if (type !== 'search') {
-        setCurrentSearchQuery(''); // Clear search context if navigating away
+        setCurrentSearchQuery('');
     }
     setMobileMenuOpen(false);
-    // If a post is open, close it to show the feed
     if (selectedPost) {
         handlePostClose();
     }
@@ -267,18 +259,14 @@ const App: React.FC = () => {
   const handleSearchSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && searchInput.trim()) {
         const query = searchInput.trim();
-        
-        // Check for direct subreddit navigation "r/name"
         if (query.toLowerCase().startsWith('r/')) {
             const subName = query.substring(2);
             if (subName) {
                 handleNavigate('subreddit', subName);
-                setSearchInput(''); // Clear input after nav
+                setSearchInput('');
                 return;
             }
         }
-
-        // Perform standard search
         setCurrentSearchQuery(query);
         setCurrentFeed('search');
         setCurrentSub(undefined);
@@ -291,13 +279,12 @@ const App: React.FC = () => {
   const loadPosts = useCallback(async (isLoadMore = false) => {
     if (loading || analyzing) return;
     
-    // For initial load, clear posts if not loading more
     if (!isLoadMore) {
         setPosts([]); 
         setLoading(true);
         setError(null);
     } else {
-        setAnalyzing(true); // Show analyzing spinner at bottom
+        setAnalyzing(true);
     }
 
     try {
@@ -306,39 +293,34 @@ const App: React.FC = () => {
         currentSub, 
         isLoadMore ? after : null,
         followedSubs,
-        currentSearchQuery // Pass search query
+        currentSearchQuery,
+        currentSort,
+        currentTopTime
       );
 
       setAfter(newAfter);
 
-      // Extract data part
       const rawPosts = rawPostsData.map(p => p.data);
 
       if (rawPosts.length === 0) {
-          // No posts returned, possibly end of feed
           if (!isLoadMore) setLoading(false);
           setAnalyzing(false);
           return;
       }
 
-      // Analyze with Gemini/AI Service
-      if (!isLoadMore) setLoading(false); // Stop main loader if initial load
+      if (!isLoadMore) setLoading(false);
       setAnalyzing(true);
 
       const analysisResults = await analyzePostsForZen(rawPosts, aiConfig);
       
-      // Update Blocked Count
       const blockedInThisBatch = analysisResults.filter(r => r.isRageBait).length;
       if (blockedInThisBatch > 0) {
           setBlockedCount(prev => prev + blockedInThisBatch);
       }
 
-      // Merge results
       const processedPosts: FilteredPost[] = rawPosts.map(post => {
         const analysis = analysisResults.find(a => a.id === post.id);
         const zenScore = analysis ? analysis.zenScore : 50;
-        
-        // Double check rage bait logic client side for safety
         const threshold = aiConfig.minZenScore ?? 50;
         const calculatedIsRageBait = zenScore < threshold;
 
@@ -348,12 +330,11 @@ const App: React.FC = () => {
           zenScore: zenScore,
           zenReason: analysis ? analysis.reason : 'Pending'
         };
-      }).filter(p => !p.isRageBait); // FILTER OUT RAGE BAIT
+      }).filter(p => !p.isRageBait);
 
       setPosts(prev => isLoadMore ? [...prev, ...processedPosts] : processedPosts);
     } catch (e: any) {
       console.error(e);
-      // Only set error if we don't have posts to show (initial load)
       if (!isLoadMore) {
         setError(e.message || "Failed to load content. Reddit might be blocking connections.");
       }
@@ -361,18 +342,16 @@ const App: React.FC = () => {
       setLoading(false);
       setAnalyzing(false);
     }
-  }, [currentFeed, currentSub, after, followedSubs, loading, analyzing, aiConfig, currentSearchQuery]);
+  }, [currentFeed, currentSub, after, followedSubs, loading, analyzing, aiConfig, currentSearchQuery, currentSort, currentTopTime]);
 
-  // Initial load when feed changes
+  // Initial load when feed or sort changes
   useEffect(() => {
-    // Reset state when navigation changes
     setPosts([]);
     setAfter(null);
     loadPosts(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentFeed, currentSub, currentSearchQuery]); // Added currentSearchQuery to dependency
+  }, [currentFeed, currentSub, currentSearchQuery, currentSort, currentTopTime]);
   
-  // Infinite Scroll Observer
   useEffect(() => {
     const observer = new IntersectionObserver(
         entries => {
@@ -500,7 +479,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Header Area */}
-        <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
                 <h2 className="text-3xl font-light text-stone-800 dark:text-stone-100 tracking-tight flex items-center gap-3">
                     {currentFeed === 'popular' && "Popular on Reddit"}
@@ -541,11 +520,66 @@ const App: React.FC = () => {
             
             <button 
                 onClick={() => loadPosts(false)}
-                className="flex items-center justify-center space-x-2 bg-white dark:bg-stone-900 px-4 py-2 rounded-lg border border-stone-200 dark:border-stone-800 shadow-sm hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors text-sm font-medium text-stone-600 dark:text-stone-300"
+                className="hidden md:flex items-center justify-center space-x-2 bg-white dark:bg-stone-900 px-4 py-2 rounded-lg border border-stone-200 dark:border-stone-800 shadow-sm hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors text-sm font-medium text-stone-600 dark:text-stone-300"
             >
                 <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
                 <span>Refresh</span>
             </button>
+        </div>
+
+        {/* Sort Controls */}
+        <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide md:pb-0">
+             {[
+                { id: 'hot', label: 'Hot', icon: Flame },
+                { id: 'new', label: 'New', icon: Clock },
+                { id: 'rising', label: 'Rising', icon: TrendingUp },
+                { id: 'top', label: 'Top', icon: Trophy },
+             ].map((opt) => (
+                 <button
+                    key={opt.id}
+                    onClick={() => setCurrentSort(opt.id as SortOption)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all shrink-0 ${
+                        currentSort === opt.id 
+                            ? 'bg-stone-800 text-white dark:bg-stone-100 dark:text-stone-900 shadow-md' 
+                            : 'bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-400 border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800'
+                    }`}
+                 >
+                    <opt.icon size={14} />
+                    {opt.label}
+                 </button>
+             ))}
+
+             {/* Time Dropdown for Top Sort */}
+             {currentSort === 'top' && (
+                 <div className="relative animate-in fade-in slide-in-from-left-2 ml-1">
+                    <select
+                        value={currentTopTime}
+                        onChange={(e) => setCurrentTopTime(e.target.value as TopTimeOption)}
+                        className="appearance-none pl-3 pr-8 py-1.5 bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-lg text-sm font-medium text-stone-700 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 cursor-pointer"
+                    >
+                        <option value="hour">Now</option>
+                        <option value="day">Today</option>
+                        <option value="week">This Week</option>
+                        <option value="month">This Month</option>
+                        <option value="year">This Year</option>
+                        <option value="all">All Time</option>
+                    </select>
+                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-stone-500">
+                        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                    </div>
+                 </div>
+             )}
+             
+             {/* Mobile Refresh Button (Inline with sort) */}
+             <div className="flex-1 md:hidden"></div>
+             <button 
+                onClick={() => loadPosts(false)}
+                className="md:hidden p-2 bg-white dark:bg-stone-900 rounded-full border border-stone-200 dark:border-stone-800 shadow-sm text-stone-600 dark:text-stone-400"
+             >
+                <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+             </button>
         </div>
 
         {/* Feed */}

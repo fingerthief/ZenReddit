@@ -1,5 +1,5 @@
 
-import { RedditListing, RedditPost, RedditComment } from '../types';
+import { RedditListing, RedditPost, RedditComment, SortOption, TopTimeOption } from '../types';
 
 const BASE_URL = 'https://www.reddit.com';
 
@@ -48,8 +48,9 @@ const fetchWithProxy = async (url: string) => {
   for (const provider of proxiesToTry) {
     try {
       // Add cache buster to prevent sticky 502s from the proxy caching the error
+      // changed parameter from 't' to 'cb' to avoid collision with Reddit's time parameter 't'
       const separator = url.includes('?') ? '&' : '?';
-      const urlWithCacheBuster = `${url}${separator}t=${Date.now()}`;
+      const urlWithCacheBuster = `${url}${separator}cb=${Date.now()}`;
       
       const targetUrl = provider(urlWithCacheBuster);
       
@@ -101,23 +102,35 @@ export const fetchFeed = async (
   subreddit?: string,
   after: string | null = null,
   followedSubs: string[] = [],
-  searchQuery?: string
+  searchQuery?: string,
+  sort: SortOption = 'hot',
+  time: TopTimeOption = 'day'
 ): Promise<{ posts: RedditPost[]; after: string | null }> => {
   let url = '';
   
-  if (type === 'popular') {
-    // Standard /r/popular feed
-    url = `${BASE_URL}/r/popular/hot.json?limit=15&raw_json=1`;
-  } else if (type === 'all') {
-    // Standard /r/all feed
-    url = `${BASE_URL}/r/all.json?limit=15&raw_json=1`;
-  } else if (type === 'subreddit' && subreddit) {
-    url = `${BASE_URL}/r/${subreddit}/hot.json?limit=15&raw_json=1`;
-  } else if (type === 'search' && searchQuery) {
-    // Search Feed
-    url = `${BASE_URL}/search.json?q=${encodeURIComponent(searchQuery)}&limit=15&raw_json=1`;
+  // Construct Base URL based on Type and Sort
+  if (type === 'search' && searchQuery) {
+    // Search has a different structure: /search.json?q=...&sort=...
+    // Note: Search doesn't support 'rising', map it to relevance or hot.
+    const searchSort = sort === 'rising' ? 'relevance' : sort;
+    url = `${BASE_URL}/search.json?q=${encodeURIComponent(searchQuery)}&sort=${searchSort}&limit=15&raw_json=1`;
+  } else {
+    // Standard feeds
+    let path = '';
+    if (type === 'popular') path = '/r/popular';
+    else if (type === 'all') path = '/r/all';
+    else if (type === 'subreddit' && subreddit) path = `/r/${subreddit}`;
+    
+    // Add Sort to path
+    url = `${BASE_URL}${path}/${sort}.json?limit=15&raw_json=1`;
   }
 
+  // Append Time parameter for 'Top' sort
+  if (sort === 'top') {
+    url += `&t=${time}`;
+  }
+
+  // Append Pagination
   if (after) {
     url += `&after=${after}`;
   }
