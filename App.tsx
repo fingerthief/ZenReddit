@@ -6,12 +6,11 @@ import PostDetail from './components/PostDetail';
 import ImageViewer from './components/ImageViewer';
 import SettingsModal from './components/SettingsModal';
 import ScanningVisualizer from './components/ScanningVisualizer';
-import { FeedType, FilteredPost, RedditPostData, AIConfig, SortOption, TopTimeOption, CachedAnalysis } from './types';
+import { FeedType, FilteredPost, RedditPostData, AIConfig, SortOption, TopTimeOption, CachedAnalysis, GalleryItem } from './types';
 import { fetchFeed } from './services/redditService';
-import { analyzePostsForZen, AnalysisResult } from './services/geminiService';
+import { analyzePostsForZen, AnalysisResult } from './services/aiService';
 import { Loader2, RefreshCw, Menu, CloudOff, TriangleAlert } from 'lucide-react';
 
-// Helper to safely load from local storage
 const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
   try {
     const saved = localStorage.getItem(key);
@@ -22,7 +21,7 @@ const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
   }
 };
 
-const SEEN_EXPIRY_MS = 72 * 60 * 60 * 1000; // 72 hours
+const SEEN_EXPIRY_MS = 72 * 60 * 60 * 1000;
 
 const PostSkeleton = () => (
   <div className="bg-white dark:bg-stone-900 p-3 md:p-4 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 mb-4 animate-pulse">
@@ -51,7 +50,6 @@ const App: React.FC = () => {
   // Navigation State
   const [currentFeed, setCurrentFeed] = useState<FeedType>(() => {
     const saved = loadFromStorage('zen_last_feed', 'popular');
-    // Migration: If user had 'home' stored, switch to 'popular'
     // @ts-ignore
     if (saved === 'home') return 'popular';
     return saved;
@@ -75,8 +73,10 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
   const [selectedPost, setSelectedPost] = useState<FilteredPost | null>(null);
-  const [viewingImage, setViewingImage] = useState<string | null>(null);
+  const [viewingGallery, setViewingGallery] = useState<{ items: GalleryItem[], index: number } | null>(null);
+  
   const [after, setAfter] = useState<string | null>(null);
   
   // Cache State
@@ -169,7 +169,7 @@ const App: React.FC = () => {
   useEffect(() => {
     try {
         const now = Date.now();
-        const expiry = 7 * 24 * 60 * 60 * 1000; // 7 days
+        const expiry = 7 * 24 * 60 * 60 * 1000;
         const cleaned: Record<string, CachedAnalysis> = {};
         Object.entries(analysisCache).forEach(([key, val]) => {
             const cachedVal = val as CachedAnalysis;
@@ -185,12 +185,12 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
-      if (viewingImage) setViewingImage(null);
+      if (viewingGallery) setViewingGallery(null);
       else if (selectedPost) setSelectedPost(null);
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [selectedPost, viewingImage]);
+  }, [selectedPost, viewingGallery]);
 
   // --- Handlers ---
   const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
@@ -204,9 +204,9 @@ const App: React.FC = () => {
       setSeenPosts(prev => ({ ...prev, [post.id]: Date.now() }));
   };
 
-  const handleImageClick = (imageUrl: string) => {
+  const handleGalleryClick = (items: GalleryItem[], index: number) => {
       try { window.history.pushState({ imageOpen: true }, '', null); } catch (e) {}
-      setViewingImage(imageUrl);
+      setViewingGallery({ items, index });
   };
 
   const handlePostClose = () => {
@@ -214,9 +214,9 @@ const App: React.FC = () => {
       else setSelectedPost(null);
   };
 
-  const handleImageClose = () => {
-      if (window.history.state?.imageOpen) try { window.history.back(); } catch(e) { setViewingImage(null); }
-      else setViewingImage(null);
+  const handleGalleryClose = () => {
+      if (window.history.state?.imageOpen) try { window.history.back(); } catch(e) { setViewingGallery(null); }
+      else setViewingGallery(null);
   };
 
   const handleNavigate = (type: FeedType, sub?: string) => {
@@ -230,7 +230,7 @@ const App: React.FC = () => {
     if (type !== 'search') setCurrentSearchQuery('');
     setMobileMenuOpen(false);
     if (selectedPost) handlePostClose();
-    setViewingImage(null);
+    setViewingGallery(null);
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -245,7 +245,7 @@ const App: React.FC = () => {
       const endY = e.changedTouches[0].clientY;
       touchStartRef.current = null;
 
-      if (startX < 40 && !viewingImage) {
+      if (startX < 40 && !viewingGallery) {
           const dx = endX - startX;
           const dy = Math.abs(endY - startY);
           if (dx > 80 && dy < 60 && navHistory.length > 0) {
@@ -490,7 +490,7 @@ const App: React.FC = () => {
                                 isSeen={!!seenPosts[post.id]}
                                 onClick={handlePostClick}
                                 onNavigateSub={handlePostNavigateSub}
-                                onImageClick={handleImageClick}
+                                onImageClick={handleGalleryClick}
                             />
                         ))}
                     </div>
@@ -516,11 +516,11 @@ const App: React.FC = () => {
           />
       )}
 
-      {viewingImage && (
+      {viewingGallery && (
           <ImageViewer 
-            src={viewingImage} 
-            alt="Full size" 
-            onClose={handleImageClose} 
+            items={viewingGallery.items}
+            initialIndex={viewingGallery.index}
+            onClose={handleGalleryClose} 
           />
       )}
 

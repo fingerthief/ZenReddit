@@ -1,7 +1,7 @@
 
 import React from 'react';
-import { FilteredPost } from '../types';
-import { MessageSquare, ArrowBigUp, Image as ImageIcon, CirclePlay } from 'lucide-react';
+import { FilteredPost, GalleryItem } from '../types';
+import { MessageSquare, ArrowBigUp, Image as ImageIcon, CirclePlay, Layers } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface PostCardProps {
@@ -9,7 +9,7 @@ interface PostCardProps {
   isSeen?: boolean;
   onClick: (post: FilteredPost) => void;
   onNavigateSub?: (sub: string) => void;
-  onImageClick?: (url: string) => void;
+  onImageClick?: (items: GalleryItem[], initialIndex: number) => void;
 }
 
 const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNavigateSub, onImageClick }) => {
@@ -29,30 +29,64 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
       // If it's a video, let the click bubble up to open PostDetail (which has the video player)
       if (isVideo) return;
 
-      // Logic to find best resolution image
-      let imageUrl = post.url;
-      if (post.preview?.images?.[0]?.source?.url) {
-          imageUrl = post.preview.images[0].source.url.replace(/&amp;/g, '&');
+      // --- Gallery Detection ---
+      
+      // 1. Reddit Native Gallery
+      if (post.gallery_data && post.media_metadata) {
+          const items: GalleryItem[] = post.gallery_data.items.map(item => {
+              const media = post.media_metadata![item.media_id];
+              // Prefer 'u' (url) or 'gif' source.
+              let src = media?.s?.u || media?.s?.gif;
+              if (src) {
+                  src = src.replace(/&amp;/g, '&');
+                  return {
+                      src,
+                      caption: item.caption,
+                      id: item.id
+                  };
+              }
+              return null;
+          }).filter((i): i is GalleryItem => i !== null);
+
+          if (items.length > 0 && onImageClick) {
+              e.stopPropagation();
+              onImageClick(items, 0);
+              return;
+          }
       }
 
-      // Check if it's likely an image we can display
-      const isImage = imageUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) || 
-                      post.domain?.includes('i.redd.it') || 
-                      (post.domain?.includes('imgur.com') && !post.url.includes('/a/')); // Skip imgur albums
+      // 2. Single Image / Imgur Album Fallback
+      // If we don't have gallery metadata, we try to show the best preview we have.
+      let imageUrl = post.url;
+      let hasPreview = false;
+      
+      if (post.preview?.images?.[0]?.source?.url) {
+          imageUrl = post.preview.images[0].source.url.replace(/&amp;/g, '&');
+          hasPreview = true;
+      }
 
-      if (onImageClick && isImage) {
+      // Check validity
+      const urlNoParams = imageUrl.split('?')[0].toLowerCase();
+      const hasImageExtension = urlNoParams.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+      const isRedditImage = post.domain?.includes('i.redd.it');
+      
+      const isImage = hasImageExtension || isRedditImage || hasPreview;
+
+      if (isImage && onImageClick) {
           e.stopPropagation();
-          onImageClick(imageUrl);
+          onImageClick([{ src: imageUrl, caption: post.title }], 0);
       }
   };
 
   const getThumbnail = () => {
-    // Robust video detection:
     const isVideo = post.is_video || 
                     !!post.secure_media?.reddit_video || 
                     !!post.preview?.reddit_video_preview ||
                     (post.url && !!post.url.match(/\.(mp4|gifv|webm|mkv|mov)$/i)) ||
                     post.domain === 'v.redd.it';
+    
+    // Check if it is a multi-image gallery for the icon overlay
+    const isGallery = post.gallery_data || (post.url.includes('imgur.com') && (post.url.includes('/a/') || post.url.includes('/gallery/')));
 
     const opacityClass = isSeen ? "opacity-60" : "opacity-100";
 
@@ -73,6 +107,11 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
                <CirclePlay size={28} className="text-white drop-shadow-lg opacity-90" strokeWidth={1.5} fill="rgba(0,0,0,0.5)" />
             </div>
+          )}
+          {isGallery && !isVideo && (
+             <div className="absolute bottom-1 right-1 bg-black/60 rounded px-1 py-0.5 flex items-center gap-0.5">
+                 <Layers size={10} className="text-white" />
+             </div>
           )}
         </div>
       );
@@ -101,7 +140,6 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
       className={`bg-white dark:bg-stone-900 p-3 md:p-4 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 hover:shadow-md transition-all cursor-pointer mb-4 ${isSeen ? 'bg-stone-50 dark:bg-stone-900/50' : ''}`}
     >
       <div className="flex">
-        {/* Thumbnail for quick visual context */}
         {getThumbnail()}
 
         <div className="flex-1 min-w-0">
@@ -145,7 +183,6 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
               <MessageSquare size={16} />
               <span>{post.num_comments > 1000 ? `${(post.num_comments / 1000).toFixed(1)}k` : post.num_comments} <span className="hidden sm:inline">comments</span></span>
             </div>
-            {/* Zen Badge for Mobile */}
              {post.zenScore !== undefined && (
               <span className={`sm:hidden px-2 py-0.5 rounded-full text-[10px] font-medium border ${
                 post.zenScore >= 80 ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-900/50' :

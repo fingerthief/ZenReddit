@@ -1,3 +1,4 @@
+
 // Reddit API Types
 
 export interface RedditPostData {
@@ -97,6 +98,12 @@ export type FeedType = 'popular' | 'all' | 'subreddit' | 'search';
 export interface SubredditSubscription {
   name: string;
   icon?: string;
+}
+
+export interface GalleryItem {
+  src: string;
+  caption?: string;
+  id?: string | number;
 }
 
 // Sorting Types

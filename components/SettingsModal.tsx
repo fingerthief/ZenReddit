@@ -19,7 +19,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [provider] = useState<AIProvider>('openrouter');
   const [openRouterKey, setOpenRouterKey] = useState('');
-  const [openRouterModel, setOpenRouterModel] = useState('google/gemini-2.0-flash-lite-preview-02-05:free');
+  const [openRouterModel, setOpenRouterModel] = useState('meta-llama/llama-3-8b-instruct:free');
   const [minZenScore, setMinZenScore] = useState(50);
   const [customInstructions, setCustomInstructions] = useState('');
   const [localPageSize, setLocalPageSize] = useState(pageSize);
@@ -36,7 +36,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setOpenRouterKey(config.openRouterKey || '');
-      setOpenRouterModel(config.openRouterModel || 'google/gemini-2.0-flash-lite-preview-02-05:free');
+      setOpenRouterModel(config.openRouterModel || 'meta-llama/llama-3-8b-instruct:free');
       setMinZenScore(config.minZenScore ?? 50);
       setCustomInstructions(config.customInstructions || '');
       setLocalPageSize(pageSize);

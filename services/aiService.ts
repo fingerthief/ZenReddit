@@ -15,7 +15,6 @@ export const analyzePostsForZen = async (posts: RedditPostData[], config?: AICon
   const apiKey = config?.openRouterKey || process.env.API_KEY;
 
   if (!apiKey) {
-      // Fail silently/gracefully if no key, just return fallback
       return fallbackResult(posts);
   }
 
@@ -28,8 +27,8 @@ export const analyzePostsForZen = async (posts: RedditPostData[], config?: AICon
   }));
 
   const threshold = config?.minZenScore ?? 50;
-  // Default to a free/cheap model on OpenRouter if not specified
-  const model = config?.openRouterModel || 'google/gemini-2.0-flash-lite-preview-02-05:free';
+  // Default to a free model on OpenRouter
+  const model = config?.openRouterModel || 'meta-llama/llama-3-8b-instruct:free';
   
   const customPrompt = config?.customInstructions ? 
     `USER CUSTOM PREFERENCES (IMPORTANT): "${config.customInstructions}". Adjust your scoring and reasoning based on these preferences.` : "";
@@ -59,7 +58,7 @@ export const analyzePostsForZen = async (posts: RedditPostData[], config?: AICon
         headers: {
           "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json",
-          "HTTP-Referer": window.location.origin, // Required by OpenRouter
+          "HTTP-Referer": window.location.origin, 
           "X-Title": "ZenReddit"
         },
         body: JSON.stringify({
@@ -106,7 +105,7 @@ export const analyzePostsForZen = async (posts: RedditPostData[], config?: AICon
       }));
 
   } catch (error) {
-      console.error("Gemini/OpenRouter Analysis Failed:", error);
+      console.error("AI/OpenRouter Analysis Failed:", error);
       return fallbackResult(posts);
   }
 };
