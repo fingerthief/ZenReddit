@@ -1,4 +1,5 @@
 
+
 // Reddit API Types
 
 export interface RedditPostData {
@@ -94,6 +95,7 @@ export interface FilteredPost extends RedditPostData {
 }
 
 export type FeedType = 'popular' | 'all' | 'subreddit' | 'search';
+export type ViewMode = 'card' | 'compact';
 
 export interface SubredditSubscription {
   name: string;

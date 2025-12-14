@@ -401,6 +401,14 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
+    // Lock body scroll when modal is open
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
+
+  useEffect(() => {
     const loadComments = async () => {
       setLoading(true);
       const data = await fetchComments(post.permalink);
@@ -532,8 +540,14 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-white md:bg-black/50 md:backdrop-blur-sm p-0 md:p-4 animate-fade-in">
-      <div className="bg-white dark:bg-stone-900 w-full md:max-w-4xl h-full md:h-[90vh] md:rounded-2xl shadow-2xl flex flex-col overflow-hidden border-none md:border border-stone-200 dark:border-stone-700 animate-slide-up-modal">
+    <div 
+        className="fixed inset-0 z-50 flex items-center justify-center bg-white md:bg-black/50 md:backdrop-blur-sm p-0 md:p-4 animate-fade-in"
+        onClick={onClose}
+    >
+      <div 
+        className="bg-white dark:bg-stone-900 w-full md:max-w-4xl h-full md:h-[90vh] md:rounded-2xl shadow-2xl flex flex-col overflow-hidden border-none md:border border-stone-200 dark:border-stone-700 animate-slide-up-modal"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-3 md:p-4 border-b border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900 shrink-0 sticky top-0 z-10">
           <div className="flex items-center gap-2 md:gap-4 overflow-hidden">

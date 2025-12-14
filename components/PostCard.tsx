@@ -1,6 +1,7 @@
 
+
 import React from 'react';
-import { FilteredPost, GalleryItem } from '../types';
+import { FilteredPost, GalleryItem, ViewMode } from '../types';
 import { MessageSquare, ArrowBigUp, Image as ImageIcon, CirclePlay, Layers, ExternalLink } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -10,9 +11,10 @@ interface PostCardProps {
   onClick: (post: FilteredPost) => void;
   onNavigateSub?: (sub: string) => void;
   onImageClick?: (items: GalleryItem[], initialIndex: number) => void;
+  viewMode?: ViewMode;
 }
 
-const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNavigateSub, onImageClick }) => {
+const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNavigateSub, onImageClick, viewMode = 'card' }) => {
   const decodeHtml = (html: string) => {
     const txt = document.createElement("textarea");
     txt.innerHTML = html;
@@ -116,6 +118,19 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
       }
   };
 
+  const getThumbnail = () => {
+      let src = null;
+      if (post.thumbnail && post.thumbnail.startsWith('http')) {
+          src = post.thumbnail;
+      } else if (post.preview?.images?.[0]?.source?.url) {
+          src = post.preview.images[0].source.url.replace(/&amp;/g, '&');
+      }
+      
+      // Fallback for default thumbnails
+      if (src === 'self' || src === 'default' || src === 'image' || !src) return null;
+      return src;
+  };
+
   const getMediaContent = () => {
     const isVideo = post.is_video || 
                     !!post.secure_media?.reddit_video || 
@@ -196,8 +211,8 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
     if (post.selftext) {
         return (
             <div 
-                className="mt-2 text-sm text-stone-600 dark:text-stone-400 leading-relaxed line-clamp-4 cursor-pointer hover:text-stone-800 dark:hover:text-stone-300 transition-colors"
-                onClick={(e) => { e.stopPropagation(); onClick(post); }}
+                className="mt-2 text-sm text-stone-600 dark:text-stone-400 leading-relaxed line-clamp-4 hover:text-stone-800 dark:hover:text-stone-300 transition-colors"
+                // onClick removed to allow bubbling to card
             >
                 {post.selftext}
             </div>
@@ -207,9 +222,81 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
     return null;
   };
 
+  // --- COMPACT VIEW ---
+  if (viewMode === 'compact') {
+      const thumb = getThumbnail();
+      const hasThumb = !!thumb;
+      
+      return (
+        <div 
+           className={`bg-white dark:bg-stone-900 rounded-lg shadow-sm border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-all cursor-pointer flex ${isSeen ? 'opacity-60' : ''}`}
+           onClick={() => onClick(post)}
+        >
+            {hasThumb && (
+                <div 
+                    className="w-20 md:w-24 shrink-0 bg-stone-100 dark:bg-stone-800 rounded-l-lg overflow-hidden relative group"
+                    onClick={(e) => { e.stopPropagation(); handleMediaClick(e); }} 
+                >
+                    <img src={thumb} alt="thumb" className="w-full h-full object-cover" loading="lazy" />
+                    {/* Play icon overlay if video */}
+                    {(post.is_video || post.domain === 'v.redd.it') && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                            <CirclePlay size={20} className="text-white drop-shadow-md" />
+                        </div>
+                    )}
+                </div>
+            )}
+            
+            <div className={`p-3 flex flex-col justify-between flex-1 min-w-0 ${!hasThumb ? 'rounded-lg' : ''}`}>
+                <div className="flex items-start justify-between gap-3">
+                    <h3 className={`text-sm md:text-base font-medium leading-snug line-clamp-2 ${isSeen ? 'text-stone-500' : 'text-stone-800 dark:text-stone-200'}`}>
+                        {decodeHtml(post.title)}
+                    </h3>
+                     {post.zenScore !== undefined && (
+                        <div 
+                            className={`shrink-0 w-2 h-2 rounded-full mt-1.5 ${
+                                post.zenScore >= 80 ? 'bg-green-500' :
+                                post.zenScore >= 50 ? 'bg-blue-500' : 'bg-orange-500'
+                            }`}
+                            title={`Zen Score: ${post.zenScore}`}
+                        />
+                    )}
+                </div>
+
+                <div className="flex items-center gap-2 mt-2 text-xs text-stone-500 dark:text-stone-400">
+                    <span 
+                        className="font-semibold hover:text-emerald-600 dark:hover:text-emerald-400 hover:underline cursor-pointer truncate max-w-[100px]"
+                        onClick={(e) => { e.stopPropagation(); onNavigateSub && onNavigateSub(post.subreddit); }}
+                    >
+                        r/{post.subreddit}
+                    </span>
+                    <span className="text-stone-300 dark:text-stone-700">•</span>
+                    <span className="shrink-0">{formatDistanceToNow(new Date(post.created_utc * 1000), { addSuffix: false }).replace('about ', '').replace(' hours', 'h')}</span>
+                    
+                    <div className="flex-1"></div>
+                    
+                    <div className="flex items-center gap-3 bg-stone-50 dark:bg-stone-800/50 px-2 py-0.5 rounded text-stone-400 dark:text-stone-500">
+                         <div className="flex items-center gap-1">
+                            <ArrowBigUp size={14} />
+                            <span>{post.score > 1000 ? `${(post.score/1000).toFixed(1)}k` : post.score}</span>
+                         </div>
+                         <div className="w-px h-3 bg-stone-200 dark:bg-stone-700"></div>
+                         <div className="flex items-center gap-1">
+                            <MessageSquare size={12} />
+                            <span>{post.num_comments}</span>
+                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+      );
+  }
+
+  // --- CARD VIEW ---
   return (
     <div 
-      className={`bg-white dark:bg-stone-900 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 hover:shadow-md transition-all duration-300 mb-4 break-inside-avoid animate-enter-card flex flex-col ${isSeen ? 'opacity-80' : ''}`}
+      className={`bg-white dark:bg-stone-900 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 hover:shadow-md transition-all duration-300 mb-4 break-inside-avoid animate-enter-card flex flex-col cursor-pointer ${isSeen ? 'opacity-80' : ''}`}
+      onClick={() => onClick(post)}
     >
       <div className="p-4 flex flex-col h-full">
           {/* Header */}
@@ -244,8 +331,8 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
 
           {/* Title */}
           <h3 
-            className={`text-base font-semibold leading-snug cursor-pointer transition-colors ${isSeen ? 'text-stone-500 dark:text-stone-500' : 'text-stone-900 dark:text-stone-100 hover:text-emerald-700 dark:hover:text-emerald-400'}`}
-            onClick={() => onClick(post)}
+            className={`text-base font-semibold leading-snug transition-colors ${isSeen ? 'text-stone-500 dark:text-stone-500' : 'text-stone-900 dark:text-stone-100 hover:text-emerald-700 dark:hover:text-emerald-400'}`}
+            // onClick removed, bubbles to card
           >
             {decodeHtml(post.title)}
           </h3>
@@ -260,8 +347,8 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
               <span className="font-medium text-xs">{post.score > 1000 ? `${(post.score / 1000).toFixed(1)}k` : post.score}</span>
             </div>
             <div 
-                className="flex items-center gap-1.5 hover:bg-stone-100 dark:hover:bg-stone-800 px-2 py-1 rounded-md cursor-pointer transition-colors"
-                onClick={(e) => { e.stopPropagation(); onClick(post); }}
+                className="flex items-center gap-1.5 hover:bg-stone-100 dark:hover:bg-stone-800 px-2 py-1 rounded-md transition-colors"
+                // onClick removed, bubbles to card
             >
               <MessageSquare size={16} />
               <span className="text-xs">{post.num_comments > 1000 ? `${(post.num_comments / 1000).toFixed(1)}k` : post.num_comments}</span>
@@ -288,3 +375,4 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
 };
 
 export default PostCard;
+

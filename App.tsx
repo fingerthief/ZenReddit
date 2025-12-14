@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import PostCard from './components/PostCard';
@@ -7,10 +8,10 @@ import ImageViewer from './components/ImageViewer';
 import SettingsModal from './components/SettingsModal';
 import ScanningVisualizer from './components/ScanningVisualizer';
 import QuickSubSwitcher from './components/QuickSubSwitcher';
-import { FeedType, FilteredPost, RedditPostData, AIConfig, SortOption, TopTimeOption, CachedAnalysis, GalleryItem } from './types';
+import { FeedType, FilteredPost, RedditPostData, AIConfig, SortOption, TopTimeOption, CachedAnalysis, GalleryItem, ViewMode } from './types';
 import { fetchFeed } from './services/redditService';
 import { analyzePostsForZen, AnalysisResult } from './services/aiService';
-import { Loader2, RefreshCw, Menu, CloudOff, TriangleAlert, Search, ChevronDown } from 'lucide-react';
+import { Loader2, RefreshCw, Menu, CloudOff, TriangleAlert, Search, ChevronDown, LayoutGrid, List } from 'lucide-react';
 
 const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
   try {
@@ -24,23 +25,37 @@ const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
 
 const SEEN_EXPIRY_MS = 72 * 60 * 60 * 1000;
 
-const PostSkeleton = () => (
-  <div className="bg-white dark:bg-stone-900 p-4 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 mb-4 animate-pulse break-inside-avoid">
-    <div className="flex items-center gap-2 mb-3">
-        <div className="w-6 h-6 bg-stone-200 dark:bg-stone-800 rounded-full"></div>
-        <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-24"></div>
-    </div>
-    <div className="space-y-2 mb-4">
-            <div className="h-4 bg-stone-200 dark:bg-stone-800 rounded w-3/4"></div>
-            <div className="h-4 bg-stone-200 dark:bg-stone-800 rounded w-1/2"></div>
-    </div>
-    <div className="h-48 bg-stone-200 dark:bg-stone-800 rounded-lg mb-3"></div>
-    <div className="flex gap-4">
-        <div className="h-6 bg-stone-200 dark:bg-stone-800 rounded w-16"></div>
-        <div className="h-6 bg-stone-200 dark:bg-stone-800 rounded w-16"></div>
-    </div>
-  </div>
-);
+const PostSkeleton = ({ viewMode }: { viewMode: ViewMode }) => {
+    if (viewMode === 'compact') {
+        return (
+            <div className="bg-white dark:bg-stone-900 p-3 rounded-lg shadow-sm border border-stone-200 dark:border-stone-800 mb-2 animate-pulse flex items-center gap-3">
+                 <div className="w-16 h-16 bg-stone-200 dark:bg-stone-800 rounded shrink-0"></div>
+                 <div className="flex-1 space-y-2">
+                     <div className="h-4 bg-stone-200 dark:bg-stone-800 rounded w-3/4"></div>
+                     <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-1/3"></div>
+                 </div>
+            </div>
+        )
+    }
+    
+    return (
+      <div className="bg-white dark:bg-stone-900 p-4 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 mb-4 animate-pulse break-inside-avoid">
+        <div className="flex items-center gap-2 mb-3">
+            <div className="w-6 h-6 bg-stone-200 dark:bg-stone-800 rounded-full"></div>
+            <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-24"></div>
+        </div>
+        <div className="space-y-2 mb-4">
+                <div className="h-4 bg-stone-200 dark:bg-stone-800 rounded w-3/4"></div>
+                <div className="h-4 bg-stone-200 dark:bg-stone-800 rounded w-1/2"></div>
+        </div>
+        <div className="h-48 bg-stone-200 dark:bg-stone-800 rounded-lg mb-3"></div>
+        <div className="flex gap-4">
+            <div className="h-6 bg-stone-200 dark:bg-stone-800 rounded w-16"></div>
+            <div className="h-6 bg-stone-200 dark:bg-stone-800 rounded w-16"></div>
+        </div>
+      </div>
+    );
+};
 
 const App: React.FC = () => {
   // Navigation State
@@ -60,6 +75,9 @@ const App: React.FC = () => {
   // Sorting State
   const [currentSort, setCurrentSort] = useState<SortOption>(() => loadFromStorage<SortOption>('zen_sort', 'hot'));
   const [currentTopTime, setCurrentTopTime] = useState<TopTimeOption>(() => loadFromStorage<TopTimeOption>('zen_top_time', 'day'));
+
+  // View Mode State
+  const [viewMode, setViewMode] = useState<ViewMode>(() => loadFromStorage<ViewMode>('zen_view_mode', 'card'));
 
   // Page Size State
   const [pageSize, setPageSize] = useState<number>(() => loadFromStorage<number>('zen_page_size', 25));
@@ -162,6 +180,7 @@ const App: React.FC = () => {
   useEffect(() => localStorage.setItem('zen_top_time', JSON.stringify(currentTopTime)), [currentTopTime]);
   useEffect(() => localStorage.setItem('zen_page_size', JSON.stringify(pageSize)), [pageSize]);
   useEffect(() => localStorage.setItem('zen_text_size', JSON.stringify(textSize)), [textSize]);
+  useEffect(() => localStorage.setItem('zen_view_mode', viewMode), [viewMode]);
   useEffect(() => localStorage.setItem('zen_followed_subs', JSON.stringify(followedSubs)), [followedSubs]);
   useEffect(() => localStorage.setItem('zen_blocked_count', blockedCount.toString()), [blockedCount]);
   useEffect(() => {
@@ -564,19 +583,39 @@ const App: React.FC = () => {
                  )}
              </div>
 
-             <button 
-                onClick={() => loadPosts(false)} 
-                className={`p-2 rounded-full hover:bg-stone-200 dark:hover:bg-stone-800 transition-colors shrink-0 ml-2 ${loading ? 'animate-spin' : ''}`}
-                title="Refresh"
-             >
-                 <RefreshCw size={20} className="text-stone-500" />
-             </button>
+             <div className="flex items-center">
+                {/* View Mode Toggle */}
+                <div className="flex bg-white dark:bg-stone-900 rounded-lg border border-stone-200 dark:border-stone-800 p-1 mr-2 shrink-0">
+                    <button 
+                        onClick={() => setViewMode('card')}
+                        className={`p-1.5 rounded-md transition-all ${viewMode === 'card' ? 'bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-sm' : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}
+                        title="Card View"
+                    >
+                        <LayoutGrid size={18} />
+                    </button>
+                    <button 
+                        onClick={() => setViewMode('compact')}
+                        className={`p-1.5 rounded-md transition-all ${viewMode === 'compact' ? 'bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-sm' : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}
+                        title="Compact View"
+                    >
+                        <List size={18} />
+                    </button>
+                </div>
+
+                <button 
+                    onClick={() => loadPosts(false)} 
+                    className={`p-2 rounded-full hover:bg-stone-200 dark:hover:bg-stone-800 transition-colors shrink-0 ${loading ? 'animate-spin' : ''}`}
+                    title="Refresh"
+                >
+                    <RefreshCw size={20} className="text-stone-500" />
+                </button>
+             </div>
          </div>
 
          {/* Content Area */}
          {loading && posts.length === 0 ? (
-             <div className="columns-1 md:columns-2 xl:columns-3 gap-4 md:gap-6 space-y-4 md:space-y-6">
-                 {[1,2,3,4,5,6].map(i => <PostSkeleton key={i} />)}
+             <div className={viewMode === 'card' ? "columns-1 md:columns-2 xl:columns-3 gap-4 md:gap-6 space-y-4 md:space-y-6" : "flex flex-col gap-3 max-w-4xl mx-auto"}>
+                 {[1,2,3,4,5,6].map(i => <PostSkeleton key={i} viewMode={viewMode} />)}
              </div>
          ) : error ? (
              <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -597,7 +636,7 @@ const App: React.FC = () => {
                         </p>
                     </div>
                 ) : (
-                    <div className="columns-1 md:columns-2 xl:columns-3 gap-4 md:gap-6 space-y-4 md:space-y-6 pb-4">
+                    <div className={viewMode === 'card' ? "columns-1 md:columns-2 xl:columns-3 gap-4 md:gap-6 space-y-4 md:space-y-6 pb-4" : "flex flex-col gap-3 max-w-4xl mx-auto pb-4"}>
                         {posts.map(post => (
                             <PostCard 
                                 key={post.id} 
@@ -606,6 +645,7 @@ const App: React.FC = () => {
                                 onClick={handlePostClick}
                                 onNavigateSub={handlePostNavigateSub}
                                 onImageClick={handleGalleryClick}
+                                viewMode={viewMode}
                             />
                         ))}
                     </div>
