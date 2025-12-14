@@ -1,18 +1,23 @@
 
+
 import React, { useEffect, useState, useRef, useMemo, memo } from 'react';
-import { FilteredPost, RedditComment, RedditListing } from '../types';
+import { FilteredPost, RedditComment, RedditListing, CommentAnalysis, AIConfig } from '../types';
 import { fetchComments } from '../services/redditService';
-import { X, ExternalLink, Loader2, ArrowBigUp, ChevronLeft, ChevronRight, ChevronDown, MessageSquare, Images, Plus, MoreHorizontal } from 'lucide-react';
+import { analyzeCommentsForZen } from '../services/aiService';
+import { X, ExternalLink, Loader2, ArrowBigUp, ChevronLeft, ChevronRight, ChevronDown, MessageSquare, Images, Plus, MoreHorizontal, ShieldAlert, Eye } from 'lucide-react';
 import Hls from 'hls.js';
 import { formatDistanceToNow } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import ScanningVisualizer from './ScanningVisualizer';
 
 interface PostDetailProps {
   post: FilteredPost;
   onClose: () => void;
   onNavigateSub?: (sub: string) => void;
   textSize: 'small' | 'medium' | 'large';
+  aiConfig: AIConfig;
+  onCommentsBlocked: (count: number) => void;
 }
 
 // Generate consistent avatar color from username
@@ -250,11 +255,15 @@ const CommentNode: React.FC<{
     onNavigateSub?: (sub: string) => void; 
     textSize: 'small' | 'medium' | 'large';
     opAuthor: string;
-}> = memo(({ comment, depth = 0, onNavigateSub, textSize, opAuthor }) => {
+    toxicityAnalysis?: CommentAnalysis | null;
+}> = memo(({ comment, depth = 0, onNavigateSub, textSize, opAuthor, toxicityAnalysis }) => {
   const [collapsed, setCollapsed] = useState(false);
   const [visibleReplies, setVisibleReplies] = useState(5); 
+  const [forceShowToxic, setForceShowToxic] = useState(false);
   const data = comment.data;
   const isOp = data.author === opAuthor;
+  
+  const isToxic = toxicityAnalysis?.isToxic;
   
   // Skip if deleted
   if (data.author === '[deleted]') return null;
@@ -282,6 +291,29 @@ const CommentNode: React.FC<{
     e.stopPropagation();
     setVisibleReplies(replies.length);
   };
+
+  // If toxic and not forced shown, render the shield
+  if (isToxic && !forceShowToxic) {
+      return (
+          <div className={`mt-4 border border-stone-200 dark:border-stone-800 rounded-lg p-3 bg-stone-50 dark:bg-stone-900/30 animate-in fade-in`}>
+              <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-stone-500 dark:text-stone-400">
+                      <ShieldAlert size={16} className="text-orange-500" />
+                      <span className="text-xs font-medium">
+                          Comment hidden by Zen Shield {toxicityAnalysis?.reason ? `(${toxicityAnalysis.reason})` : ''}
+                      </span>
+                  </div>
+                  <button 
+                    onClick={() => setForceShowToxic(true)}
+                    className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
+                  >
+                      <Eye size={12} />
+                      View
+                  </button>
+              </div>
+          </div>
+      );
+  }
 
   return (
     <div className={`flex flex-col animate-in fade-in duration-300 ${depth === 0 ? 'mt-4 border-b border-stone-100 dark:border-stone-800 pb-4' : 'mt-4'}`}>
@@ -313,6 +345,10 @@ const CommentNode: React.FC<{
                      <span className="ml-1 text-[10px] bg-stone-100 dark:bg-stone-800 px-2 py-0.5 rounded-full text-stone-500 font-medium">
                          {hasReplies ? `${replies.length} replies` : 'collapsed'}
                      </span>
+                 )}
+                 
+                 {isToxic && forceShowToxic && (
+                     <span className="ml-1 text-[10px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded border border-orange-200">Toxic Content</span>
                  )}
             </div>
         </div>
@@ -374,7 +410,7 @@ const CommentNode: React.FC<{
                     <div className="mt-1">
                         {replies.slice(0, visibleReplies).map((child) => {
                             if (child.kind === 't1') {
-                                return <CommentNode key={child.data.id} comment={child as RedditComment} depth={depth + 1} onNavigateSub={onNavigateSub} textSize={textSize} opAuthor={opAuthor} />;
+                                return <CommentNode key={child.data.id} comment={child as RedditComment} depth={depth + 1} onNavigateSub={onNavigateSub} textSize={textSize} opAuthor={opAuthor} toxicityAnalysis={toxicityAnalysis} />;
                             }
                             if (child.kind === 'more') {
                                 return (
@@ -421,9 +457,12 @@ const CommentNode: React.FC<{
   );
 });
 
-const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, textSize }) => {
+const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, textSize, aiConfig, onCommentsBlocked }) => {
   const [comments, setComments] = useState<RedditComment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [analyzingComments, setAnalyzingComments] = useState(false);
+  const [commentAnalysisMap, setCommentAnalysisMap] = useState<Record<string, CommentAnalysis>>({});
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -441,9 +480,30 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
       const data = await fetchComments(post.permalink);
       setComments(data);
       setLoading(false);
+
+      // Trigger Analysis if enabled and we have comments
+      if (aiConfig.analyzeComments && data.length > 0 && aiConfig.openRouterKey) {
+           setAnalyzingComments(true);
+           try {
+               const analysisResults = await analyzeCommentsForZen(data, aiConfig);
+               const map: Record<string, CommentAnalysis> = {};
+               analysisResults.forEach(r => map[r.id] = r);
+               setCommentAnalysisMap(map);
+               
+               // Report to tracker
+               const toxicCount = analysisResults.filter(r => r.isToxic).length;
+               if (toxicCount > 0) {
+                   onCommentsBlocked(toxicCount);
+               }
+           } catch (e) {
+               console.warn("Comment analysis failed", e);
+           } finally {
+               setAnalyzingComments(false);
+           }
+      }
     };
     loadComments();
-  }, [post.permalink]);
+  }, [post.permalink, aiConfig]);
 
   // Handle Video Playback with HLS (for sound)
   useEffect(() => {
@@ -669,6 +729,13 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
               </div>
 
               {/* Comments Section */}
+              {analyzingComments && (
+                 <div className="mb-6">
+                     <ScanningVisualizer mode="compact" />
+                     <p className="text-center text-[10px] text-stone-400 mt-2 uppercase tracking-wide">Shielding you from toxic threads...</p>
+                 </div>
+              )}
+
               {loading ? (
                 <div className="flex flex-col items-center justify-center py-12">
                   <Loader2 className="animate-spin text-emerald-500 mb-2" size={32} />
@@ -678,7 +745,13 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                 <div className="pb-20">
                   {comments.map((comment) => (
                     <div key={comment.data.id} data-parent-comment="true">
-                        <CommentNode comment={comment} onNavigateSub={onNavigateSub} textSize={textSize} opAuthor={post.author} />
+                        <CommentNode 
+                            comment={comment} 
+                            onNavigateSub={onNavigateSub} 
+                            textSize={textSize} 
+                            opAuthor={post.author} 
+                            toxicityAnalysis={commentAnalysisMap[comment.data.id]}
+                        />
                     </div>
                   ))}
                   {comments.length === 0 && (

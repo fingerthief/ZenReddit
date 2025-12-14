@@ -126,6 +126,7 @@ export interface AIConfig {
   openRouterModel?: string;
   minZenScore?: number; // 0-100, threshold for filtering
   customInstructions?: string;
+  analyzeComments?: boolean; 
 }
 
 export interface CachedAnalysis {
@@ -134,4 +135,10 @@ export interface CachedAnalysis {
   zenScore: number;
   reason: string;
   timestamp: number;
+}
+
+export interface CommentAnalysis {
+  id: string;
+  isToxic: boolean;
+  reason?: string;
 }

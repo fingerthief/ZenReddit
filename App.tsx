@@ -112,6 +112,7 @@ const App: React.FC = () => {
   });
 
   const [blockedCount, setBlockedCount] = useState(() => loadFromStorage<number>('zen_blocked_count', 0));
+  const [blockedCommentCount, setBlockedCommentCount] = useState(() => loadFromStorage<number>('zen_blocked_comment_count', 0));
   
   // Seen Posts State
   const [seenPosts, setSeenPosts] = useState<Record<string, number>>(() => {
@@ -151,6 +152,7 @@ const App: React.FC = () => {
   const [aiConfig, setAiConfig] = useState<AIConfig>(() => ({
     provider: 'openrouter',
     minZenScore: 50,
+    analyzeComments: false,
     ...loadFromStorage('zen_ai_config', {})
   }));
   
@@ -189,6 +191,7 @@ const App: React.FC = () => {
   useEffect(() => localStorage.setItem('zen_view_mode', viewMode), [viewMode]);
   useEffect(() => localStorage.setItem('zen_followed_subs', JSON.stringify(followedSubs)), [followedSubs]);
   useEffect(() => localStorage.setItem('zen_blocked_count', blockedCount.toString()), [blockedCount]);
+  useEffect(() => localStorage.setItem('zen_blocked_comment_count', blockedCommentCount.toString()), [blockedCommentCount]);
   useEffect(() => {
     try {
       localStorage.setItem('zen_seen_posts', JSON.stringify(seenPosts));
@@ -256,6 +259,10 @@ const App: React.FC = () => {
   const handleGalleryClose = () => {
       if (window.history.state?.imageOpen) try { window.history.back(); } catch(e) { setViewingGallery(null); }
       else setViewingGallery(null);
+  };
+
+  const handleCommentsBlocked = (count: number) => {
+      setBlockedCommentCount(prev => prev + count);
   };
 
   const handleNavigate = (type: FeedType, sub?: string, query?: string) => {
@@ -488,6 +495,7 @@ const App: React.FC = () => {
                     theme={theme}
                     toggleTheme={toggleTheme}
                     blockedCount={blockedCount}
+                    blockedCommentCount={blockedCommentCount}
                     onOpenSettings={() => { setSettingsOpen(true); setMobileMenuOpen(false); }}
                   />
               </div>
@@ -506,6 +514,7 @@ const App: React.FC = () => {
             theme={theme}
             toggleTheme={toggleTheme}
             blockedCount={blockedCount}
+            blockedCommentCount={blockedCommentCount}
             onOpenSettings={() => setSettingsOpen(true)}
           />
       </div>
@@ -682,6 +691,8 @@ const App: React.FC = () => {
             onClose={handlePostClose} 
             onNavigateSub={handlePostNavigateSub}
             textSize={textSize}
+            aiConfig={aiConfig}
+            onCommentsBlocked={handleCommentsBlocked}
           />
       )}
 

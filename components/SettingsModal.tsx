@@ -1,6 +1,7 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, CircleAlert, Loader2, Shield, Key, Check, Search, Sparkles, Layers, Type } from 'lucide-react';
+import { X, Save, CircleAlert, Loader2, Shield, Key, Check, Search, Sparkles, Layers, Type, MessageSquare } from 'lucide-react';
 import { AIConfig, AIProvider } from '../types';
 
 interface SettingsModalProps {
@@ -22,6 +23,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [openRouterModel, setOpenRouterModel] = useState('meta-llama/llama-3-8b-instruct:free');
   const [minZenScore, setMinZenScore] = useState(50);
   const [customInstructions, setCustomInstructions] = useState('');
+  const [analyzeComments, setAnalyzeComments] = useState(false);
+  
   const [localPageSize, setLocalPageSize] = useState(pageSize);
   const [localTextSize, setLocalTextSize] = useState(textSize);
   
@@ -39,6 +42,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       setOpenRouterModel(config.openRouterModel || 'meta-llama/llama-3-8b-instruct:free');
       setMinZenScore(config.minZenScore ?? 50);
       setCustomInstructions(config.customInstructions || '');
+      setAnalyzeComments(config.analyzeComments || false);
       setLocalPageSize(pageSize);
       setLocalTextSize(textSize);
     }
@@ -95,7 +99,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       openRouterKey: openRouterKey,
       openRouterModel: openRouterModel,
       minZenScore,
-      customInstructions
+      customInstructions,
+      analyzeComments
     });
     onPageSizeChange(localPageSize);
     onTextSizeChange(localTextSize);
@@ -159,6 +164,27 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 </p>
             </div>
             
+            <div className="border-t border-stone-100 dark:border-stone-800"></div>
+
+            {/* AI Comment Analysis Toggle */}
+            <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col">
+                    <label className="flex items-center gap-2 text-sm font-medium text-stone-700 dark:text-stone-300 mb-1">
+                        <MessageSquare size={16} />
+                        Zen Comments
+                    </label>
+                    <p className="text-xs text-stone-500 dark:text-stone-400">
+                        Analyze comments when you open a post and hide toxic or aggressive threads automatically.
+                    </p>
+                </div>
+                <div 
+                    className={`w-11 h-6 rounded-full p-0.5 cursor-pointer transition-colors ${analyzeComments ? 'bg-emerald-500' : 'bg-stone-300 dark:bg-stone-700'}`}
+                    onClick={() => setAnalyzeComments(!analyzeComments)}
+                >
+                    <div className={`w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${analyzeComments ? 'translate-x-5' : 'translate-x-0'}`} />
+                </div>
+            </div>
+
             <div className="border-t border-stone-100 dark:border-stone-800"></div>
 
             {/* Display Options Section */}
