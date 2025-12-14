@@ -1,5 +1,9 @@
 # ZenReddit 🌿
 
+> **⚠️ AI-GENERATED PROJECT DISCLAIMER**
+> 
+> This application was **primarily architected and coded by Artificial Intelligence** (specifically Google's Gemini models). It serves as a **proof of concept** to test the limits of current AI software engineering capabilities. While fully functional, it should be viewed as an experimental showcase of AI-assisted development.
+
 ZenReddit is a peaceful, AI-powered Reddit client designed to filter out rage-bait, divisive politics, and high-stress content. It uses the OpenRouter API to analyze posts in real-time, assigning a "Zen Score" to content and shielding you from negativity.
 
 ![ZenReddit App](https://via.placeholder.com/800x450?text=ZenReddit+Preview)
