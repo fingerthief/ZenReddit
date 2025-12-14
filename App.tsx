@@ -25,24 +25,19 @@ const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
 const SEEN_EXPIRY_MS = 72 * 60 * 60 * 1000;
 
 const PostSkeleton = () => (
-  <div className="bg-white dark:bg-stone-900 p-3 md:p-4 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 mb-4 animate-pulse">
-    <div className="flex">
-      <div className="w-16 h-16 md:w-20 md:h-20 bg-stone-200 dark:bg-stone-800 rounded-md mr-3 md:mr-4 shrink-0"></div>
-      <div className="flex-1 min-w-0 py-1 space-y-3">
-        <div className="flex items-center space-x-2">
-            <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-24"></div>
-            <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-4"></div>
-            <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-16"></div>
-        </div>
-        <div className="space-y-2">
-             <div className="h-4 bg-stone-200 dark:bg-stone-800 rounded w-3/4"></div>
-             <div className="h-4 bg-stone-200 dark:bg-stone-800 rounded w-1/2"></div>
-        </div>
-        <div className="flex gap-4 pt-1">
-            <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-12"></div>
-            <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-12"></div>
-        </div>
-      </div>
+  <div className="bg-white dark:bg-stone-900 p-4 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 mb-4 animate-pulse break-inside-avoid">
+    <div className="flex items-center gap-2 mb-3">
+        <div className="w-6 h-6 bg-stone-200 dark:bg-stone-800 rounded-full"></div>
+        <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-24"></div>
+    </div>
+    <div className="space-y-2 mb-4">
+            <div className="h-4 bg-stone-200 dark:bg-stone-800 rounded w-3/4"></div>
+            <div className="h-4 bg-stone-200 dark:bg-stone-800 rounded w-1/2"></div>
+    </div>
+    <div className="h-48 bg-stone-200 dark:bg-stone-800 rounded-lg mb-3"></div>
+    <div className="flex gap-4">
+        <div className="h-6 bg-stone-200 dark:bg-stone-800 rounded w-16"></div>
+        <div className="h-6 bg-stone-200 dark:bg-stone-800 rounded w-16"></div>
     </div>
   </div>
 );
@@ -510,7 +505,7 @@ const App: React.FC = () => {
 
       {/* Main Content */}
       <main 
-        className="flex-1 w-full max-w-3xl mx-auto px-4 pt-16 md:pt-8 md:px-8 pb-8 min-h-screen relative z-10 bg-stone-100 dark:bg-stone-950"
+        className="flex-1 w-full max-w-[1800px] mx-auto px-4 pt-16 md:pt-8 md:px-6 pb-8 min-h-screen relative z-10 bg-stone-100 dark:bg-stone-950"
         style={{ 
             transform: `translateY(${pullY}px)`, 
             transition: isPulling ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' 
@@ -518,7 +513,7 @@ const App: React.FC = () => {
       >
          
          {/* Search Bar */}
-         <form onSubmit={handleSearchSubmit} className="relative mb-4 group">
+         <form onSubmit={handleSearchSubmit} className="relative mb-4 group max-w-3xl mx-auto">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Search className="h-5 w-5 text-stone-400 group-focus-within:text-emerald-500 transition-colors" />
             </div>
@@ -532,7 +527,7 @@ const App: React.FC = () => {
          </form>
 
          {/* Toolbar */}
-         <div className="flex items-center justify-between mb-6">
+         <div className="flex items-center justify-between mb-6 max-w-3xl mx-auto xl:max-w-none">
              <div className="flex items-center gap-2 overflow-x-auto pb-2 hide-scrollbar">
                  {/* Sort Buttons */}
                  {(['hot', 'new', 'top', 'rising'] as SortOption[]).map((option) => (
@@ -580,9 +575,8 @@ const App: React.FC = () => {
 
          {/* Content Area */}
          {loading && posts.length === 0 ? (
-             <div className="space-y-4">
-                 {[1,2,3].map(i => <PostSkeleton key={i} />)}
-                 <ScanningVisualizer mode="compact" />
+             <div className="columns-1 md:columns-2 xl:columns-3 gap-4 md:gap-6 space-y-4 md:space-y-6">
+                 {[1,2,3,4,5,6].map(i => <PostSkeleton key={i} />)}
              </div>
          ) : error ? (
              <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -603,7 +597,7 @@ const App: React.FC = () => {
                         </p>
                     </div>
                 ) : (
-                    <div className="space-y-4">
+                    <div className="columns-1 md:columns-2 xl:columns-3 gap-4 md:gap-6 space-y-4 md:space-y-6 pb-4">
                         {posts.map(post => (
                             <PostCard 
                                 key={post.id} 
@@ -618,7 +612,7 @@ const App: React.FC = () => {
                 )}
                 
                 {/* Loader / Scanner at bottom */}
-                <div ref={observerTarget} className="py-8 flex flex-col items-center justify-center min-h-[100px]">
+                <div ref={observerTarget} className="py-8 flex flex-col items-center justify-center min-h-[100px] w-full">
                     {(loading || analyzing) && (
                          analyzing ? <ScanningVisualizer mode="compact" /> : <Loader2 className="animate-spin text-stone-400" size={32} />
                     )}
