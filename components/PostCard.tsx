@@ -1,5 +1,4 @@
 
-
 import React from 'react';
 import { FilteredPost, GalleryItem, ViewMode } from '../types';
 import { MessageSquare, ArrowBigUp, Image as ImageIcon, CirclePlay, Layers, ExternalLink } from 'lucide-react';
@@ -229,15 +228,15 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
       
       return (
         <div 
-           className={`bg-white dark:bg-stone-900 rounded-lg shadow-sm border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-all cursor-pointer flex ${isSeen ? 'opacity-60' : ''}`}
+           className={`bg-white dark:bg-stone-900 rounded-lg shadow-sm border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-all cursor-pointer flex overflow-hidden ${isSeen ? 'opacity-60' : ''}`}
            onClick={() => onClick(post)}
         >
             {hasThumb && (
                 <div 
-                    className="w-20 md:w-24 shrink-0 bg-stone-100 dark:bg-stone-800 rounded-l-lg overflow-hidden relative group"
+                    className="w-[80px] min-h-[80px] sm:w-[110px] sm:min-h-[90px] shrink-0 bg-stone-100 dark:bg-stone-800 relative group"
                     onClick={(e) => { e.stopPropagation(); handleMediaClick(e); }} 
                 >
-                    <img src={thumb} alt="thumb" className="w-full h-full object-cover" loading="lazy" />
+                    <img src={thumb} alt="thumb" className="w-full h-full object-cover absolute inset-0" loading="lazy" />
                     {/* Play icon overlay if video */}
                     {(post.is_video || post.domain === 'v.redd.it') && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/20">
@@ -247,14 +246,14 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
                 </div>
             )}
             
-            <div className={`p-3 flex flex-col justify-between flex-1 min-w-0 ${!hasThumb ? 'rounded-lg' : ''}`}>
-                <div className="flex items-start justify-between gap-3">
-                    <h3 className={`text-sm md:text-base font-medium leading-snug line-clamp-2 ${isSeen ? 'text-stone-500' : 'text-stone-800 dark:text-stone-200'}`}>
+            <div className={`py-2 pr-2 pl-3 sm:p-3 flex flex-col justify-between flex-1 min-w-0`}>
+                <div className="flex items-start justify-between gap-2">
+                    <h3 className={`text-sm sm:text-base font-medium leading-snug line-clamp-2 ${isSeen ? 'text-stone-500' : 'text-stone-800 dark:text-stone-200'}`}>
                         {decodeHtml(post.title)}
                     </h3>
                      {post.zenScore !== undefined && (
                         <div 
-                            className={`shrink-0 w-2 h-2 rounded-full mt-1.5 ${
+                            className={`shrink-0 w-1.5 h-1.5 rounded-full mt-1.5 ${
                                 post.zenScore >= 80 ? 'bg-green-500' :
                                 post.zenScore >= 50 ? 'bg-blue-500' : 'bg-orange-500'
                             }`}
@@ -263,27 +262,26 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
                     )}
                 </div>
 
-                <div className="flex items-center gap-2 mt-2 text-xs text-stone-500 dark:text-stone-400">
-                    <span 
-                        className="font-semibold hover:text-emerald-600 dark:hover:text-emerald-400 hover:underline cursor-pointer truncate max-w-[100px]"
-                        onClick={(e) => { e.stopPropagation(); onNavigateSub && onNavigateSub(post.subreddit); }}
-                    >
-                        r/{post.subreddit}
-                    </span>
-                    <span className="text-stone-300 dark:text-stone-700">•</span>
-                    <span className="shrink-0">{formatDistanceToNow(new Date(post.created_utc * 1000), { addSuffix: false }).replace('about ', '').replace(' hours', 'h')}</span>
+                <div className="flex items-center justify-between mt-2 text-xs text-stone-500 dark:text-stone-400 gap-2">
+                    <div className="flex items-center gap-1.5 truncate min-w-0">
+                        <span 
+                            className="font-medium hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer truncate"
+                            onClick={(e) => { e.stopPropagation(); onNavigateSub && onNavigateSub(post.subreddit); }}
+                        >
+                            r/{post.subreddit}
+                        </span>
+                        <span className="text-stone-300 dark:text-stone-700 shrink-0">•</span>
+                        <span className="shrink-0">{formatDistanceToNow(new Date(post.created_utc * 1000), { addSuffix: false }).replace('about ', '').replace(' hours', 'h').replace('less than a minute', 'now')}</span>
+                    </div>
                     
-                    <div className="flex-1"></div>
-                    
-                    <div className="flex items-center gap-3 bg-stone-50 dark:bg-stone-800/50 px-2 py-0.5 rounded text-stone-400 dark:text-stone-500">
+                    <div className="flex items-center gap-3 shrink-0">
                          <div className="flex items-center gap-1">
-                            <ArrowBigUp size={14} />
+                            <ArrowBigUp size={14} className="stroke-[2.5px]" />
                             <span>{post.score > 1000 ? `${(post.score/1000).toFixed(1)}k` : post.score}</span>
                          </div>
-                         <div className="w-px h-3 bg-stone-200 dark:bg-stone-700"></div>
                          <div className="flex items-center gap-1">
-                            <MessageSquare size={12} />
-                            <span>{post.num_comments}</span>
+                            <MessageSquare size={12} className="stroke-[2.5px]" />
+                            <span>{post.num_comments > 1000 ? `${(post.num_comments/1000).toFixed(1)}k` : post.num_comments}</span>
                          </div>
                     </div>
                 </div>
@@ -375,4 +373,3 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
 };
 
 export default PostCard;
-

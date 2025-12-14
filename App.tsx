@@ -28,11 +28,17 @@ const SEEN_EXPIRY_MS = 72 * 60 * 60 * 1000;
 const PostSkeleton = ({ viewMode }: { viewMode: ViewMode }) => {
     if (viewMode === 'compact') {
         return (
-            <div className="bg-white dark:bg-stone-900 p-3 rounded-lg shadow-sm border border-stone-200 dark:border-stone-800 mb-2 animate-pulse flex items-center gap-3">
-                 <div className="w-16 h-16 bg-stone-200 dark:bg-stone-800 rounded shrink-0"></div>
-                 <div className="flex-1 space-y-2">
-                     <div className="h-4 bg-stone-200 dark:bg-stone-800 rounded w-3/4"></div>
-                     <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-1/3"></div>
+            <div className="bg-white dark:bg-stone-900 rounded-lg shadow-sm border border-stone-200 dark:border-stone-800 mb-2 animate-pulse flex overflow-hidden">
+                 <div className="w-[80px] h-[80px] sm:w-[110px] sm:h-auto bg-stone-200 dark:bg-stone-800 shrink-0"></div>
+                 <div className="flex-1 p-2 sm:p-3 flex flex-col justify-between min-w-0">
+                     <div className="space-y-2 w-full">
+                         <div className="h-4 bg-stone-200 dark:bg-stone-800 rounded w-full"></div>
+                         <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-2/3"></div>
+                     </div>
+                     <div className="flex justify-between items-end mt-2">
+                         <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-16"></div>
+                         <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-12"></div>
+                     </div>
                  </div>
             </div>
         )
