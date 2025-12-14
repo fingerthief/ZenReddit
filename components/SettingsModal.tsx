@@ -117,8 +117,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white dark:bg-stone-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-stone-200 dark:border-stone-700 max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+      <div className="bg-white dark:bg-stone-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-stone-200 dark:border-stone-700 max-h-[90vh] flex flex-col animate-scale-in">
         <div className="flex items-center justify-between p-4 border-b border-stone-100 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/50 sticky top-0 z-10 shrink-0">
           <h2 className="text-lg font-semibold text-stone-800 dark:text-stone-100">Settings</h2>
           <button onClick={onClose} className="p-1.5 text-stone-500 hover:bg-stone-200 dark:hover:bg-stone-800 rounded-full transition-colors">
@@ -226,7 +226,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     value={customInstructions}
                     onChange={(e) => setCustomInstructions(e.target.value)}
                     placeholder="e.g. I dislike politics, I love cats, Filter out spoilers..."
-                    className="w-full h-24 bg-white dark:bg-stone-950 border border-stone-200 dark:border-stone-700 rounded-lg px-3 py-2 text-sm text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none"
+                    className="w-full h-24 bg-white dark:bg-stone-950 border border-stone-200 dark:border-stone-700 rounded-lg px-3 py-2 text-sm text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none transition-shadow"
                 />
                 <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
                     These instructions will be passed to the AI to tailor your feed.
@@ -255,7 +255,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 value={openRouterKey}
                 onChange={(e) => setOpenRouterKey(e.target.value)}
                 placeholder="sk-or-..."
-                className="w-full bg-white dark:bg-stone-950 border border-stone-200 dark:border-stone-700 rounded-lg px-3 py-2 text-sm text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                className="w-full bg-white dark:bg-stone-950 border border-stone-200 dark:border-stone-700 rounded-lg px-3 py-2 text-sm text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-shadow"
               />
               <p className="text-xs text-stone-400 mt-1">Stored locally in your browser.</p>
             </div>
@@ -275,7 +275,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         }}
                         onFocus={() => setShowModelList(true)}
                         placeholder="Search or enter model ID..."
-                        className="w-full bg-white dark:bg-stone-950 border border-stone-200 dark:border-stone-700 rounded-lg pl-3 pr-10 py-2 text-sm text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                        className="w-full bg-white dark:bg-stone-950 border border-stone-200 dark:border-stone-700 rounded-lg pl-3 pr-10 py-2 text-sm text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-shadow"
                       />
                       <div className="absolute right-2 top-2 text-stone-400">
                           {loadingModels ? <Loader2 className="animate-spin" size={16} /> : <Search size={16} />}
@@ -284,7 +284,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
                   {/* Custom Dropdown */}
                   {showModelList && (
-                      <div className="absolute z-20 w-full mt-1 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                      <div className="absolute z-20 w-full mt-1 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg shadow-xl max-h-60 overflow-y-auto animate-fade-in">
                           {models.length === 0 && !loadingModels && (
                               <div className="p-4 text-center text-sm text-stone-500">
                                   {openRouterKey.length < 5 ? "Enter API Key to load models" : "No models found or loading..."}
@@ -333,7 +333,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="p-4 border-t border-stone-100 dark:border-stone-800 flex justify-end sticky bottom-0 bg-white dark:bg-stone-900 shrink-0">
           <button
             onClick={handleSave}
-            className="flex items-center space-x-2 bg-stone-800 dark:bg-stone-100 text-stone-100 dark:text-stone-900 px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity"
+            className="flex items-center space-x-2 bg-stone-800 dark:bg-stone-100 text-stone-100 dark:text-stone-900 px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity active:scale-95"
           >
             <Save size={16} />
             <span>Save Settings</span>

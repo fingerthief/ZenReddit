@@ -92,44 +92,56 @@ const MarkdownRenderer: React.FC<{ content: string; onNavigateSub?: (sub: string
   );
 });
 
-// Gallery Component
+// Gallery Component with Smooth Swipe
 const GalleryViewer: React.FC<{ items: { src: string; caption?: string; id: string | number }[] }> = ({ items }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
-
-  const minSwipeDistance = 50;
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const touchStartRef = useRef<number | null>(null);
 
   const onTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
+    setIsAnimating(false);
+    touchStartRef.current = e.targetTouches[0].clientX;
   };
 
   const onTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX);
+    if (touchStartRef.current === null) return;
+    const currentX = e.targetTouches[0].clientX;
+    const diff = currentX - touchStartRef.current;
+    
+    // Resistance at edges
+    if ((currentIndex === 0 && diff > 0) || (currentIndex === items.length - 1 && diff < 0)) {
+        setDragOffset(diff * 0.3);
+    } else {
+        setDragOffset(diff);
+    }
   };
 
   const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    const distance = touchStart - touchEnd;
-    const isLeftSwipe = distance > minSwipeDistance;
-    const isRightSwipe = distance < -minSwipeDistance;
+    if (touchStartRef.current === null) return;
+    setIsAnimating(true);
     
-    if (isLeftSwipe && currentIndex < items.length - 1) {
-       setCurrentIndex(curr => curr + 1);
+    if (Math.abs(dragOffset) > 80) { // Threshold to change slide
+        if (dragOffset > 0 && currentIndex > 0) {
+            setCurrentIndex(curr => curr - 1);
+        } else if (dragOffset < 0 && currentIndex < items.length - 1) {
+            setCurrentIndex(curr => curr + 1);
+        }
     }
-    if (isRightSwipe && currentIndex > 0) {
-       setCurrentIndex(curr => curr - 1);
-    }
+    
+    setDragOffset(0);
+    touchStartRef.current = null;
   };
 
   const handlePrev = (e: React.MouseEvent) => {
       e.stopPropagation();
+      setIsAnimating(true);
       if (currentIndex > 0) setCurrentIndex(curr => curr - 1);
   };
 
   const handleNext = (e: React.MouseEvent) => {
       e.stopPropagation();
+      setIsAnimating(true);
       if (currentIndex < items.length - 1) setCurrentIndex(curr => curr + 1);
   };
 
@@ -144,21 +156,33 @@ const GalleryViewer: React.FC<{ items: { src: string; caption?: string; id: stri
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
     >
-        {/* Main Image Container */}
-        <div className="relative flex justify-center items-center min-h-[300px] md:min-h-[400px] bg-stone-100 dark:bg-stone-950">
-             <img 
-                key={currentItem.src} // Key forces re-render for clean transitions
-                src={currentItem.src} 
-                alt={currentItem.caption || `Image ${currentIndex + 1}`}
-                className="max-h-[70vh] w-full object-contain animate-in fade-in duration-300"
-                loading="eager"
-            />
+        {/* Main Image Container - Carousel Track */}
+        <div className="relative overflow-hidden min-h-[300px] md:min-h-[400px] bg-stone-100 dark:bg-stone-950">
+             <div 
+                className="flex h-full w-full"
+                style={{ 
+                    transform: `translateX(calc(-${currentIndex * 100}% + ${dragOffset}px))`,
+                    transition: isAnimating ? 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' : 'none'
+                }}
+             >
+                {items.map((item, index) => (
+                    <div key={item.id || index} className="w-full h-full flex-shrink-0 flex items-center justify-center p-0.5">
+                         <img 
+                            src={item.src} 
+                            alt={item.caption || `Image ${index + 1}`}
+                            className="max-h-[70vh] w-full object-contain"
+                            loading={Math.abs(index - currentIndex) <= 1 ? "eager" : "lazy"}
+                            draggable={false}
+                        />
+                    </div>
+                ))}
+             </div>
             
-            {/* Desktop Hover Navigation Buttons */}
+            {/* Desktop Navigation */}
             {currentIndex > 0 && (
                 <button 
                     onClick={handlePrev}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 p-2 bg-black/40 hover:bg-black/60 text-white rounded-full backdrop-blur-md transition-all opacity-0 group-hover:opacity-100 hidden md:flex items-center justify-center transform hover:scale-110"
+                    className="absolute left-4 top-1/2 -translate-y-1/2 p-2 bg-black/40 hover:bg-black/60 text-white rounded-full backdrop-blur-md transition-all opacity-0 group-hover:opacity-100 hidden md:flex items-center justify-center transform hover:scale-110 active:scale-95"
                     title="Previous Image"
                 >
                     <ChevronLeft size={28} />
@@ -168,7 +192,7 @@ const GalleryViewer: React.FC<{ items: { src: string; caption?: string; id: stri
             {currentIndex < items.length - 1 && (
                 <button 
                     onClick={handleNext}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-black/40 hover:bg-black/60 text-white rounded-full backdrop-blur-md transition-all opacity-0 group-hover:opacity-100 hidden md:flex items-center justify-center transform hover:scale-110"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-black/40 hover:bg-black/60 text-white rounded-full backdrop-blur-md transition-all opacity-0 group-hover:opacity-100 hidden md:flex items-center justify-center transform hover:scale-110 active:scale-95"
                     title="Next Image"
                 >
                     <ChevronRight size={28} />
@@ -177,11 +201,9 @@ const GalleryViewer: React.FC<{ items: { src: string; caption?: string; id: stri
         </div>
 
         {/* Caption Overlay */}
-        {currentItem.caption && (
-            <div className="bg-white dark:bg-stone-900 p-3 text-sm text-stone-600 dark:text-stone-300 border-t border-stone-100 dark:border-stone-800">
-                {currentItem.caption}
-            </div>
-        )}
+        <div className="bg-white dark:bg-stone-900 p-3 text-sm text-stone-600 dark:text-stone-300 border-t border-stone-100 dark:border-stone-800 transition-opacity duration-300">
+            {currentItem.caption || <span>&nbsp;</span>}
+        </div>
         
         {/* Image Counter Badge */}
         <div className="absolute top-3 right-3 bg-black/60 text-white px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-sm flex items-center gap-1.5 shadow-sm">
@@ -189,13 +211,13 @@ const GalleryViewer: React.FC<{ items: { src: string; caption?: string; id: stri
             {currentIndex + 1} / {items.length}
         </div>
 
-        {/* Mobile Dots Indicator */}
-        {items.length > 1 && items.length <= 10 && (
-             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 md:hidden pointer-events-none">
+        {/* Dots Indicator */}
+        {items.length > 1 && items.length <= 15 && (
+             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none z-10">
                 {items.map((_, idx) => (
                     <div 
                         key={idx} 
-                        className={`w-1.5 h-1.5 rounded-full transition-all shadow-sm ${idx === currentIndex ? 'bg-white scale-125' : 'bg-white/40'}`}
+                        className={`w-1.5 h-1.5 rounded-full transition-all shadow-sm ${idx === currentIndex ? 'bg-white scale-125 w-3' : 'bg-white/40'}`}
                     />
                 ))}
              </div>
@@ -245,7 +267,7 @@ const CommentNode: React.FC<{
   };
 
   return (
-    <div className={`mt-3 ${depth > 0 ? 'ml-0 md:ml-4 pl-3 md:pl-4 border-l-2 border-stone-100 dark:border-stone-800' : ''}`}>
+    <div className={`mt-3 ${depth > 0 ? 'ml-0 md:ml-4 pl-3 md:pl-4 border-l-2 border-stone-100 dark:border-stone-800' : ''} animate-in fade-in duration-500`}>
       <div className="flex flex-col">
         {/* Comment Header - Clickable to Collapse */}
         <div 
@@ -275,14 +297,15 @@ const CommentNode: React.FC<{
                 {data.score}
             </div>
             {collapsed && (
-                <span className="text-stone-400 ml-2 italic text-[10px]">
+                <span className="text-stone-400 ml-2 italic text-[10px] animate-fade-in">
                     {hasReplies ? `(${replies.length} replies)` : '(collapsed)'}
                 </span>
             )}
         </div>
 
-        {!collapsed && (
-            <>
+        {/* Expandable Content Wrapper */}
+        <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${collapsed ? 'grid-rows-0 opacity-0' : 'grid-rows-1 opacity-100'}`}>
+            <div className="overflow-hidden">
                 {/* Comment Body with Markdown */}
                 <div className={`pl-1 ${isOp ? 'border-l-2 border-blue-100 dark:border-blue-900/30 pl-2 -ml-1' : ''}`}>
                     <MarkdownRenderer content={data.body} onNavigateSub={onNavigateSub} textSize={textSize} />
@@ -365,8 +388,8 @@ const CommentNode: React.FC<{
                         )}
                     </div>
                 )}
-            </>
-        )}
+            </div>
+        </div>
       </div>
     </div>
   );
@@ -509,8 +532,8 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-white md:bg-black/50 md:backdrop-blur-sm p-0 md:p-4">
-      <div className="bg-white dark:bg-stone-900 w-full md:max-w-4xl h-full md:h-[90vh] md:rounded-2xl shadow-2xl flex flex-col overflow-hidden border-none md:border border-stone-200 dark:border-stone-700">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-white md:bg-black/50 md:backdrop-blur-sm p-0 md:p-4 animate-fade-in">
+      <div className="bg-white dark:bg-stone-900 w-full md:max-w-4xl h-full md:h-[90vh] md:rounded-2xl shadow-2xl flex flex-col overflow-hidden border-none md:border border-stone-200 dark:border-stone-700 animate-slide-up-modal">
         {/* Header */}
         <div className="flex items-center justify-between p-3 md:p-4 border-b border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900 shrink-0 sticky top-0 z-10">
           <div className="flex items-center gap-2 md:gap-4 overflow-hidden">

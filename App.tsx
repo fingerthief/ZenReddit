@@ -77,6 +77,7 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   const [selectedPost, setSelectedPost] = useState<FilteredPost | null>(null);
   const [viewingGallery, setViewingGallery] = useState<{ items: GalleryItem[], index: number } | null>(null);
@@ -138,7 +139,12 @@ const App: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const observerTarget = useRef<HTMLDivElement>(null);
+  
+  // Touch / Gestures state
   const touchStartRef = useRef<{x: number, y: number} | null>(null);
+  const isAtTopRef = useRef(false);
+  const [pullY, setPullY] = useState(0);
+  const [isPulling, setIsPulling] = useState(false);
 
   // --- Effects for Persistence ---
   useEffect(() => {
@@ -258,7 +264,31 @@ const App: React.FC = () => {
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
+      // Don't interfere if we are inside gallery/modal/settings
+      if (viewingGallery || selectedPost || settingsOpen) return;
+      
       touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      // Check if we are at the top allowing for some float precision or sub-pixel rendering
+      isAtTopRef.current = window.scrollY <= 1; 
+      setIsPulling(false); // Reset pulling state
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartRef.current || viewingGallery || selectedPost || settingsOpen) return;
+
+    const currentY = e.touches[0].clientY;
+    const dy = currentY - touchStartRef.current.y;
+    const dx = e.touches[0].clientX - touchStartRef.current.x;
+
+    // Pull to Refresh Logic
+    // Only engage if we started at the top AND we are still currently at the top
+    // AND the pull is downward and substantially vertical
+    if (isAtTopRef.current && dy > 0 && Math.abs(dy) > Math.abs(dx) && window.scrollY <= 1) {
+        const resistance = 0.45;
+        const newPullY = Math.min(dy * resistance, 150);
+        setPullY(newPullY);
+        setIsPulling(true);
+    }
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
@@ -267,9 +297,24 @@ const App: React.FC = () => {
       const startY = touchStartRef.current.y;
       const endX = e.changedTouches[0].clientX;
       const endY = e.changedTouches[0].clientY;
-      touchStartRef.current = null;
+      
+      setIsPulling(false);
+      
+      // Pull to Refresh Logic Trigger
+      if (pullY > 60) { // Threshold to trigger refresh
+          setPullY(60); // Snap to loading position
+          setIsRefreshing(true);
+          loadPosts(false).finally(() => {
+              setIsRefreshing(false);
+              setPullY(0);
+          });
+      } else {
+          setPullY(0); // Snap back to 0
+      }
 
-      if (startX < 40 && !viewingGallery) {
+      // Swipe Back Navigation Logic
+      // Only if not pulling down significantly and no modal open
+      if (pullY < 10 && startX < 40 && !viewingGallery && !selectedPost && !settingsOpen) {
           const dx = endX - startX;
           const dy = Math.abs(endY - startY);
           if (dx > 80 && dy < 60 && navHistory.length > 0) {
@@ -278,6 +323,8 @@ const App: React.FC = () => {
               handleNavigate(prev.feed, prev.sub, prev.query);
           }
       }
+      
+      touchStartRef.current = null;
   };
 
   const handlePostNavigateSub = (sub: string) => handleNavigate('subreddit', sub);
@@ -287,7 +334,7 @@ const App: React.FC = () => {
     if (loading || analyzing) return;
     
     if (!isLoadMore) {
-        setPosts([]); 
+        if (!isRefreshing) setPosts([]); // Don't clear posts if pulling to refresh, looks nicer to swap
         setLoading(true);
         setError(null);
     } else {
@@ -368,7 +415,7 @@ const App: React.FC = () => {
         setLoading(false);
         setAnalyzing(false);
     }
-  }, [loading, analyzing, currentFeed, currentSub, after, followedSubs, currentSearchQuery, currentSort, currentTopTime, pageSize, analysisCache, aiConfig]);
+  }, [loading, analyzing, currentFeed, currentSub, after, followedSubs, currentSearchQuery, currentSort, currentTopTime, pageSize, analysisCache, aiConfig, isRefreshing]);
 
   // Initial Load & Triggers
   useEffect(() => {
@@ -391,7 +438,12 @@ const App: React.FC = () => {
 
 
   return (
-    <div className="flex bg-stone-100 dark:bg-stone-950 min-h-screen text-stone-900 dark:text-stone-100 transition-colors font-sans" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+    <div 
+        className="flex bg-stone-100 dark:bg-stone-950 min-h-screen text-stone-900 dark:text-stone-100 transition-colors font-sans overflow-x-hidden relative" 
+        onTouchStart={handleTouchStart} 
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+    >
       {/* Mobile Header */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-white dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800 z-40 flex items-center justify-between px-4">
         <button onClick={() => setMobileMenuOpen(true)} className="p-2 -ml-2 text-stone-600 dark:text-stone-300">
@@ -438,8 +490,32 @@ const App: React.FC = () => {
           />
       </div>
 
+      {/* Pull to Refresh Indicator */}
+      <div className="fixed top-20 left-0 right-0 md:left-64 z-0 flex justify-center pointer-events-none">
+         <div 
+             className="bg-white dark:bg-stone-800 p-2 rounded-full shadow-md border border-stone-200 dark:border-stone-700 flex items-center justify-center transition-opacity"
+             style={{ 
+                 opacity: Math.min(pullY / 40, 1), 
+                 transform: `scale(${Math.min(pullY/50, 1)})`,
+                 visibility: pullY > 0 || isRefreshing ? 'visible' : 'hidden'
+             }}
+         >
+            <Loader2 
+                className={`text-emerald-500 ${isRefreshing ? 'animate-spin' : ''}`} 
+                size={24} 
+                style={{ transform: !isRefreshing ? `rotate(${pullY * 3}deg)` : 'none' }} 
+            />
+         </div>
+      </div>
+
       {/* Main Content */}
-      <main className="flex-1 w-full max-w-3xl mx-auto px-4 pt-16 md:pt-8 md:px-8 pb-8 min-h-screen">
+      <main 
+        className="flex-1 w-full max-w-3xl mx-auto px-4 pt-16 md:pt-8 md:px-8 pb-8 min-h-screen relative z-10 bg-stone-100 dark:bg-stone-950"
+        style={{ 
+            transform: `translateY(${pullY}px)`, 
+            transition: isPulling ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' 
+        }}
+      >
          
          {/* Search Bar */}
          <form onSubmit={handleSearchSubmit} className="relative mb-4 group">

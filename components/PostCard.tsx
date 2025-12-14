@@ -74,7 +74,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
       
       // 1. Reddit Native Gallery
       if (post.gallery_data && post.media_metadata) {
-          const items: GalleryItem[] = post.gallery_data.items.map(item => {
+          const items: GalleryItem[] = post.gallery_data.items.map((item): GalleryItem | null => {
               const media = post.media_metadata![item.media_id];
               // Prefer 'u' (url) or 'gif' source.
               let src = media?.s?.u || media?.s?.gif;
@@ -84,7 +84,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
                       src,
                       caption: item.caption,
                       id: item.id,
-                      type: 'image'
+                      type: 'image' as const
                   };
               }
               return null;
@@ -145,7 +145,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
           <img 
             src={post.thumbnail} 
             alt="thumb" 
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
             loading="lazy"
           />
           {isVideo && (
@@ -185,7 +185,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
   return (
     <div 
       onClick={() => onClick(post)}
-      className={`bg-white dark:bg-stone-900 p-3 md:p-4 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 hover:shadow-md transition-all cursor-pointer mb-4 ${isSeen ? 'bg-stone-50 dark:bg-stone-900/50' : ''}`}
+      className={`bg-white dark:bg-stone-900 p-3 md:p-4 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 hover:shadow-md transition-all duration-300 cursor-pointer mb-4 animate-enter-card ${isSeen ? 'bg-stone-50 dark:bg-stone-900/50' : ''}`}
     >
       <div className="flex">
         {getThumbnail()}
@@ -193,7 +193,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
         <div className="flex-1 min-w-0">
           <div className="flex items-center text-xs text-stone-500 dark:text-stone-400 mb-1 space-x-2 overflow-hidden">
             <span 
-                className="font-semibold text-stone-700 dark:text-stone-300 hover:underline truncate cursor-pointer z-10"
+                className="font-semibold text-stone-700 dark:text-stone-300 hover:underline truncate cursor-pointer z-10 transition-colors hover:text-emerald-600 dark:hover:text-emerald-400"
                 onClick={(e) => {
                     if (onNavigateSub) {
                         e.stopPropagation();
@@ -208,7 +208,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
             
             {/* Zen Badge */}
             {post.zenScore !== undefined && (
-              <span className={`hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+              <span className={`hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${
                 post.zenScore >= 80 ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-900/50' :
                 post.zenScore >= 50 ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-900/50' :
                 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-900/50'
@@ -218,13 +218,13 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
             )}
           </div>
 
-          <h3 className={`text-base md:text-lg font-medium leading-snug mb-2 line-clamp-2 ${isSeen ? 'text-stone-400 dark:text-stone-500' : 'text-stone-800 dark:text-stone-100'}`}>
+          <h3 className={`text-base md:text-lg font-medium leading-snug mb-2 line-clamp-2 transition-colors ${isSeen ? 'text-stone-400 dark:text-stone-500' : 'text-stone-800 dark:text-stone-100 group-hover:text-emerald-700 dark:group-hover:text-emerald-400'}`}>
             {decodeHtml(post.title)}
           </h3>
 
           <div className="flex items-center space-x-4 text-stone-500 dark:text-stone-400 text-sm">
             <div className="flex items-center space-x-1">
-              <ArrowBigUp size={18} />
+              <ArrowBigUp size={18} className="transition-transform active:scale-125" />
               <span>{post.score > 1000 ? `${(post.score / 1000).toFixed(1)}k` : post.score}</span>
             </div>
             <div className="flex items-center space-x-1">

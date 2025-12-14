@@ -49,9 +49,11 @@
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-      body {
+      html, body {
         font-family: 'Inter', sans-serif;
         background-color: #f5f5f4; /* stone-100 */
+        /* Prevent native pull-to-refresh on mobile chrome to allow custom implementation */
+        overscroll-behavior-y: none;
       }
       .dark body {
         background-color: #0c0a09; /* stone-950 */
@@ -85,6 +87,10 @@
         -ms-overflow-style: none;
         scrollbar-width: none;
       }
+
+      /* Animation Utilities */
+      .grid-rows-0 { grid-template-rows: 0fr; }
+      .grid-rows-1 { grid-template-rows: 1fr; }
       
       @keyframes progress-indeterminate {
         0% { transform: translateX(-100%); }
@@ -94,7 +100,7 @@
         animation: progress-indeterminate 1.5s infinite cubic-bezier(0.4, 0.0, 0.2, 1);
       }
 
-      /* Animations for Mobile Sheet */
+      /* Animations */
       @keyframes slide-up {
         from { transform: translateY(100%); }
         to { transform: translateY(0); }
@@ -102,12 +108,37 @@
       .animate-slide-up {
         animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
       }
+
       @keyframes fade-in {
         from { opacity: 0; }
         to { opacity: 1; }
       }
       .animate-fade-in {
-        animation: fade-in 0.2s ease-out;
+        animation: fade-in 0.3s ease-out forwards;
+      }
+
+      @keyframes scale-in {
+        from { opacity: 0; transform: scale(0.95); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      .animate-scale-in {
+        animation: scale-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+      }
+
+      @keyframes slide-up-modal {
+        from { opacity: 0; transform: translateY(20px) scale(0.98); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      .animate-slide-up-modal {
+        animation: slide-up-modal 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+
+      @keyframes enter-card {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .animate-enter-card {
+        animation: enter-card 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
       }
     </style>
 <script type="importmap">
