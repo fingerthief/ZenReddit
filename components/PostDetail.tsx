@@ -1,5 +1,4 @@
 
-
 import React, { useEffect, useState, useRef, useMemo, memo } from 'react';
 import { FilteredPost, RedditComment, RedditListing, CommentAnalysis, AIConfig } from '../types';
 import { fetchComments } from '../services/redditService';
@@ -295,7 +294,7 @@ const CommentNode: React.FC<{
   // If toxic and not forced shown, render the shield
   if (isToxic && !forceShowToxic) {
       return (
-          <div className={`mt-4 border border-stone-200 dark:border-stone-800 rounded-lg p-3 bg-stone-50 dark:bg-stone-900/30 animate-in fade-in`}>
+          <div className={`mt-4 border border-stone-200 dark:border-stone-800 rounded-lg p-3 bg-stone-50 dark:bg-stone-900/30 animate-list-enter`}>
               <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-stone-500 dark:text-stone-400">
                       <ShieldAlert size={16} className="text-orange-500" />
@@ -305,7 +304,7 @@ const CommentNode: React.FC<{
                   </div>
                   <button 
                     onClick={() => setForceShowToxic(true)}
-                    className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
+                    className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors btn-press"
                   >
                       <Eye size={12} />
                       View
@@ -316,7 +315,7 @@ const CommentNode: React.FC<{
   }
 
   return (
-    <div className={`flex flex-col animate-in fade-in duration-300 ${depth === 0 ? 'mt-4 border-b border-stone-100 dark:border-stone-800 pb-4' : 'mt-4'}`}>
+    <div className={`flex flex-col animate-list-enter ${depth === 0 ? 'mt-4 border-b border-stone-100 dark:border-stone-800 pb-4' : 'mt-4'}`}>
         {/* Header Row - Clickable for collapse */}
         <div 
             onClick={toggleCollapse}
@@ -395,12 +394,12 @@ const CommentNode: React.FC<{
                         <span>{data.score}</span>
                     </div>
                     
-                    <button className="flex items-center gap-1.5 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 text-xs font-medium transition-colors">
+                    <button className="flex items-center gap-1.5 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 text-xs font-medium transition-colors btn-press">
                         <MessageSquare size={14} />
                         <span>Reply</span>
                     </button>
                     
-                    <button className="p-1 text-stone-300 hover:text-stone-500 dark:text-stone-600 dark:hover:text-stone-400 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors">
+                    <button className="p-1 text-stone-300 hover:text-stone-500 dark:text-stone-600 dark:hover:text-stone-400 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors btn-press">
                          <MoreHorizontal size={14} />
                     </button>
                 </div>
@@ -434,7 +433,7 @@ const CommentNode: React.FC<{
                             <div className="mt-3 ml-1 flex items-center gap-3">
                                 <button 
                                     onClick={handleShowMore}
-                                    className="text-xs font-bold text-stone-500 hover:text-emerald-600 dark:text-stone-400 dark:hover:text-emerald-400 flex items-center gap-1.5 py-1 px-3 bg-stone-100 dark:bg-stone-800 rounded-full transition-colors"
+                                    className="text-xs font-bold text-stone-500 hover:text-emerald-600 dark:text-stone-400 dark:hover:text-emerald-400 flex items-center gap-1.5 py-1 px-3 bg-stone-100 dark:bg-stone-800 rounded-full transition-colors btn-press"
                                 >
                                     <Plus size={12} />
                                     Show {Math.min(5, replies.length - visibleReplies)} more
@@ -695,17 +694,21 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
 
   return (
     <div 
-        className="fixed inset-0 z-50 flex items-center justify-center bg-white md:bg-black/60 md:backdrop-blur-sm p-0 md:p-4 animate-fade-in"
+        className="fixed inset-0 z-50 flex items-end md:items-center justify-center animate-fade-smooth"
         onClick={onClose}
     >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-md animate-fade-in" />
+
+      {/* Modal Container */}
       <div 
-        className="bg-white dark:bg-stone-950 w-full md:max-w-4xl h-full md:h-[90vh] md:rounded-2xl shadow-2xl flex flex-col overflow-hidden border-none md:border border-stone-200 dark:border-stone-800 animate-slide-up-modal relative"
+        className="bg-white dark:bg-stone-950 w-full md:max-w-4xl h-[100dvh] md:h-[85vh] md:rounded-2xl shadow-2xl flex flex-col overflow-hidden md:border border-stone-200 dark:border-stone-800 animate-modal-spring relative z-10"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Sticky Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-stone-200 dark:border-stone-800 bg-white/90 dark:bg-stone-950/90 backdrop-blur-md shrink-0 sticky top-0 z-20">
           <div className="flex items-center gap-3 overflow-hidden">
-             <button onClick={onClose} className="p-2 -ml-2 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-full transition-colors shrink-0 md:hidden">
+             <button onClick={onClose} className="p-2 -ml-2 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-full transition-colors shrink-0 md:hidden btn-press">
                 <ChevronLeft size={24} className="text-stone-800 dark:text-stone-200" />
              </button>
              
@@ -729,7 +732,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
              </div>
           </div>
 
-          <button onClick={onClose} className="hidden md:block p-2 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-full transition-colors shrink-0">
+          <button onClick={onClose} className="hidden md:block p-2 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-full transition-colors shrink-0 btn-press">
             <X size={24} className="text-stone-500 dark:text-stone-400" />
           </button>
         </div>
@@ -740,7 +743,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
             className="flex-1 overflow-y-auto bg-white dark:bg-stone-950 relative"
         >
           <div className="p-4 md:p-8 md:pb-20 max-w-3xl mx-auto">
-              <div className="flex gap-2 mb-4">
+              <div className="flex gap-2 mb-4 animate-list-enter">
                  {post.zenScore !== undefined && (
                     <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border uppercase tracking-wider ${
                         post.zenScore >= 80 ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900/50' :
@@ -752,17 +755,19 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                   )}
               </div>
 
-              <h2 className="text-xl md:text-2xl font-bold text-stone-900 dark:text-stone-100 mb-6 leading-snug">{decodeHtml(post.title)}</h2>
+              <h2 className="text-xl md:text-2xl font-bold text-stone-900 dark:text-stone-100 mb-6 leading-snug animate-list-enter" style={{ animationDelay: '0.05s' }}>{decodeHtml(post.title)}</h2>
               
-              {renderMedia()}
+              <div className="animate-list-enter" style={{ animationDelay: '0.1s' }}>
+                {renderMedia()}
+              </div>
 
               {post.selftext && (
-                <div className="mb-8 p-1">
+                <div className="mb-8 p-1 animate-list-enter" style={{ animationDelay: '0.15s' }}>
                     <MarkdownRenderer content={post.selftext} onNavigateSub={onNavigateSub} textSize={textSize} />
                 </div>
               )}
 
-              <div className="flex items-center gap-6 py-4 border-t border-b border-stone-100 dark:border-stone-800 mb-6">
+              <div className="flex items-center gap-6 py-4 border-t border-b border-stone-100 dark:border-stone-800 mb-6 animate-list-enter" style={{ animationDelay: '0.2s' }}>
                  <div className="flex items-center gap-2">
                      <div className="flex items-center bg-stone-100 dark:bg-stone-800 rounded-full px-3 py-1.5">
                         <ArrowBigUp size={22} className={`${post.score > 0 ? 'text-orange-600 dark:text-orange-500' : 'text-stone-400'}`} strokeWidth={2.5} />
@@ -790,8 +795,8 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                 </div>
               ) : (
                 <div className="pb-20">
-                  {comments.map((comment) => (
-                    <div key={comment.data.id} data-parent-comment="true">
+                  {comments.map((comment, i) => (
+                    <div key={comment.data.id} data-parent-comment="true" style={{ animationDelay: `${i * 0.03}s` }} className="animate-list-enter">
                         <CommentNode 
                             comment={comment} 
                             onNavigateSub={onNavigateSub} 
@@ -802,7 +807,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                     </div>
                   ))}
                   {comments.length === 0 && (
-                    <div className="text-center py-12 bg-stone-50 dark:bg-stone-900/50 rounded-xl border border-dashed border-stone-200 dark:border-stone-800">
+                    <div className="text-center py-12 bg-stone-50 dark:bg-stone-900/50 rounded-xl border border-dashed border-stone-200 dark:border-stone-800 animate-list-enter">
                         <p className="text-stone-500 dark:text-stone-400 font-medium">No comments yet.</p>
                         <p className="text-stone-400 text-sm mt-1">Be the first to start the conversation on Reddit!</p>
                     </div>
@@ -816,7 +821,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
         {comments.length > 5 && (
             <button
                 onClick={scrollToNextParent}
-                className="md:hidden absolute bottom-6 right-6 z-50 bg-emerald-600 text-white p-3 rounded-full shadow-lg shadow-emerald-900/20 hover:bg-emerald-700 active:scale-95 transition-all opacity-90 hover:opacity-100"
+                className="md:hidden absolute bottom-6 right-6 z-50 bg-emerald-600 text-white p-3 rounded-full shadow-lg shadow-emerald-900/20 hover:bg-emerald-700 active:scale-95 transition-all opacity-90 hover:opacity-100 btn-press"
                 aria-label="Next comment"
             >
                 <ChevronDown size={24} />

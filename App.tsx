@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import PostCard from './components/PostCard';
@@ -6,9 +7,10 @@ import ImageViewer from './components/ImageViewer';
 import SettingsModal from './components/SettingsModal';
 import ScanningVisualizer from './components/ScanningVisualizer';
 import QuickSubSwitcher from './components/QuickSubSwitcher';
-import { FeedType, FilteredPost, RedditPostData, AIConfig, SortOption, TopTimeOption, CachedAnalysis, GalleryItem, ViewMode } from './types';
+import { FeedType, FilteredPost, RedditPostData, AIConfig, SortOption, TopTimeOption, CachedAnalysis, GalleryItem, ViewMode, UserProfile } from './types';
 import { fetchFeed } from './services/redditService';
 import { analyzePostsForZen, AnalysisResult } from './services/aiService';
+import { firebaseService } from './services/firebaseService';
 import { Loader2, RefreshCw, Menu, CloudOff, TriangleAlert, Search, ChevronDown, LayoutGrid, List } from 'lucide-react';
 
 const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
@@ -154,6 +156,9 @@ const App: React.FC = () => {
     ...loadFromStorage('zen_ai_config', {})
   }));
   
+  // User Authentication State
+  const [user, setUser] = useState<UserProfile | null>(null);
+
   // UI State
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -165,6 +170,76 @@ const App: React.FC = () => {
   const isAtTopRef = useRef(false);
   const [pullY, setPullY] = useState(0);
   const [isPulling, setIsPulling] = useState(false);
+
+  // --- Initialize Firebase ---
+  useEffect(() => {
+      const fbConfigStr = localStorage.getItem('zen_firebase_config');
+      if (fbConfigStr) {
+          try {
+              const fbConfig = JSON.parse(fbConfigStr);
+              if (firebaseService.initialize(fbConfig)) {
+                  console.log("Firebase initialized");
+                  
+                  // Listen for auth state
+                  const unsubscribe = firebaseService.onAuthChange(async (firebaseUser) => {
+                      if (firebaseUser) {
+                          setUser({
+                              uid: firebaseUser.uid,
+                              displayName: firebaseUser.displayName,
+                              email: firebaseUser.email,
+                              photoURL: firebaseUser.photoURL
+                          });
+                          
+                          // Load remote data
+                          const remoteData = await firebaseService.getUserData(firebaseUser.uid);
+                          if (remoteData) {
+                              if (remoteData.followedSubs) setFollowedSubs(remoteData.followedSubs);
+                              if (remoteData.stats) {
+                                  setBlockedCount(Math.max(blockedCount, remoteData.stats.blockedCount || 0));
+                                  setBlockedCommentCount(Math.max(blockedCommentCount, remoteData.stats.blockedCommentCount || 0));
+                              }
+                              if (remoteData.preferences) {
+                                  setAiConfig(prev => ({
+                                      ...prev,
+                                      ...remoteData.preferences,
+                                      // Preserve keys that are excluded from sync
+                                      openRouterKey: prev.openRouterKey 
+                                  }));
+                              }
+                          } else {
+                              // New cloud user, sync local data up
+                              syncToCloud(firebaseUser.uid);
+                          }
+                      } else {
+                          setUser(null);
+                      }
+                  });
+                  return () => unsubscribe();
+              }
+          } catch (e) {
+              console.error("Invalid Firebase Config", e);
+          }
+      }
+  }, []);
+
+  // --- Cloud Sync Effect ---
+  const syncToCloud = useCallback(async (uid: string) => {
+      await firebaseService.saveUserData(uid, {
+          followedSubs,
+          blockedCount,
+          blockedCommentCount,
+          aiConfig
+      });
+  }, [followedSubs, blockedCount, blockedCommentCount, aiConfig]);
+
+  useEffect(() => {
+      if (user) {
+          const timeout = setTimeout(() => {
+              syncToCloud(user.uid);
+          }, 2000); // Debounce 2s
+          return () => clearTimeout(timeout);
+      }
+  }, [user, followedSubs, blockedCount, blockedCommentCount, aiConfig, syncToCloud]);
 
   // --- Effects for Persistence ---
   useEffect(() => {
@@ -239,6 +314,27 @@ const App: React.FC = () => {
   const handleUnfollow = (sub: string) => setFollowedSubs(prev => prev.filter(s => s !== sub));
   const handleSaveSettings = (config: AIConfig) => setAiConfig(config);
 
+  const handleLogin = async () => {
+      if (!firebaseService.isInitialized()) {
+          setSettingsOpen(true);
+          alert("Please paste your Firebase Configuration in Settings to enable Cloud Sync.");
+          return;
+      }
+      try {
+          await firebaseService.login();
+      } catch (e) {
+          alert("Login failed. Check console or firebase config.");
+      }
+  };
+
+  const handleLogout = async () => {
+      try {
+          await firebaseService.logout();
+      } catch (e) {
+          console.error(e);
+      }
+  };
+
   const handlePostClick = (post: FilteredPost) => {
       try { window.history.pushState({ postOpen: true }, '', null); } catch (e) {}
       setSelectedPost(post);
@@ -293,17 +389,15 @@ const App: React.FC = () => {
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
-      // Don't interfere if we are inside gallery/modal/settings
       if (viewingGallery || selectedPost || settingsOpen) return;
       
       touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      // Check scroll on the main element
       if (mainScrollRef.current) {
           isAtTopRef.current = mainScrollRef.current.scrollTop <= 1;
       } else {
           isAtTopRef.current = window.scrollY <= 1; 
       }
-      setIsPulling(false); // Reset pulling state
+      setIsPulling(false); 
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -313,11 +407,7 @@ const App: React.FC = () => {
     const dy = currentY - touchStartRef.current.y;
     const dx = e.touches[0].clientX - touchStartRef.current.x;
 
-    // Pull to Refresh Logic
-    // Only engage if we started at the top AND we are still currently at the top
-    // AND the pull is downward and substantially vertical
     if (isAtTopRef.current && dy > 0 && Math.abs(dy) > Math.abs(dx)) {
-        // Double check scroll pos just in case
         const currentScroll = mainScrollRef.current ? mainScrollRef.current.scrollTop : window.scrollY;
         
         if (currentScroll <= 1) {
@@ -338,20 +428,17 @@ const App: React.FC = () => {
       
       setIsPulling(false);
       
-      // Pull to Refresh Logic Trigger
-      if (pullY > 60) { // Threshold to trigger refresh
-          setPullY(60); // Snap to loading position
+      if (pullY > 60) { 
+          setPullY(60); 
           setIsRefreshing(true);
           loadPosts(false).finally(() => {
               setIsRefreshing(false);
               setPullY(0);
           });
       } else {
-          setPullY(0); // Snap back to 0
+          setPullY(0); 
       }
 
-      // Swipe Back Navigation Logic
-      // Only if not pulling down significantly and no modal open
       if (pullY < 10 && startX < 40 && !viewingGallery && !selectedPost && !settingsOpen) {
           const dx = endX - startX;
           const dy = Math.abs(endY - startY);
@@ -367,12 +454,11 @@ const App: React.FC = () => {
 
   const handlePostNavigateSub = (sub: string) => handleNavigate('subreddit', sub);
 
-  // --- Main Data Fetching Logic ---
   const loadPosts = useCallback(async (isLoadMore = false) => {
     if (loading || analyzing) return;
     
     if (!isLoadMore) {
-        if (!isRefreshing) setPosts([]); // Don't clear posts if pulling to refresh, looks nicer to swap
+        if (!isRefreshing) setPosts([]); 
         setLoading(true);
         setError(null);
     } else {
@@ -400,12 +486,10 @@ const App: React.FC = () => {
           return;
       }
 
-      // --- Caching & Analysis Logic ---
       const postsToAnalyze: RedditPostData[] = [];
       const newCache = { ...analysisCache };
       let newAnalysisResults: AnalysisResult[] = [];
 
-      // Check cache for each post
       const postsWithCache = rawPosts.map(p => {
           if (newCache[p.id]) {
               return { ...p, ...newCache[p.id] };
@@ -415,12 +499,9 @@ const App: React.FC = () => {
           }
       });
 
-      // Analyze new posts
       if (postsToAnalyze.length > 0) {
           try {
              newAnalysisResults = await analyzePostsForZen(postsToAnalyze, aiConfig);
-             
-             // Update Cache
              newAnalysisResults.forEach(res => {
                  newCache[res.id] = { ...res, timestamp: Date.now() };
              });
@@ -430,7 +511,6 @@ const App: React.FC = () => {
           }
       }
 
-      // Merge analysis results
       const finalPosts = postsWithCache.map((p: any) => {
            const fresh = newAnalysisResults.find(r => r.id === p.id);
            if (fresh) return { ...p, ...fresh };
@@ -438,7 +518,6 @@ const App: React.FC = () => {
            return p;
       });
 
-      // Filter Logic
       const threshold = aiConfig.minZenScore ?? 50;
       const filtered = finalPosts.filter((p: any) => (p.zenScore ?? 50) >= threshold);
       
@@ -455,12 +534,10 @@ const App: React.FC = () => {
     }
   }, [loading, analyzing, currentFeed, currentSub, after, followedSubs, currentSearchQuery, currentSort, currentTopTime, pageSize, analysisCache, aiConfig, isRefreshing]);
 
-  // Initial Load & Triggers
   useEffect(() => {
       loadPosts(false);
   }, [currentFeed, currentSub, currentSearchQuery, currentSort, currentTopTime, pageSize, aiConfig.provider, aiConfig.openRouterModel, aiConfig.customInstructions, followedSubs]); 
 
-  // Infinite Scroll
   useEffect(() => {
       if (!observerTarget.current || loading || analyzing || !after) return;
       
@@ -486,19 +563,19 @@ const App: React.FC = () => {
         onTouchEnd={handleTouchEnd}
     >
       {/* Mobile Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-white dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800 z-40 flex items-center justify-between px-4">
-        <button onClick={() => setMobileMenuOpen(true)} className="p-2 -ml-2 text-stone-600 dark:text-stone-300">
+      <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-white/90 dark:bg-stone-900/90 backdrop-blur-md border-b border-stone-200 dark:border-stone-800 z-40 flex items-center justify-between px-4 transition-all duration-300">
+        <button onClick={() => setMobileMenuOpen(true)} className="p-2 -ml-2 text-stone-600 dark:text-stone-300 btn-press rounded-full">
            <Menu size={24} />
         </button>
-        <span className="font-semibold text-lg">ZenReddit</span>
+        <span className="font-semibold text-lg bg-clip-text text-transparent bg-gradient-to-r from-emerald-600 to-teal-500">ZenReddit</span>
         <div className="w-8"></div>
       </div>
 
       {/* Mobile Sidebar Drawer */}
       {mobileMenuOpen && (
           <div className="fixed inset-0 z-50 md:hidden">
-              <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)}></div>
-              <div className="absolute top-0 left-0 bottom-0 w-64 bg-white dark:bg-stone-900 shadow-xl animate-in slide-in-from-left duration-200">
+              <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setMobileMenuOpen(false)}></div>
+              <div className="absolute top-0 left-0 bottom-0 w-72 bg-white dark:bg-stone-900 shadow-2xl animate-modal-spring origin-left">
                   <Sidebar 
                     currentFeed={currentFeed}
                     currentSub={currentSub}
@@ -511,13 +588,16 @@ const App: React.FC = () => {
                     blockedCount={blockedCount}
                     blockedCommentCount={blockedCommentCount}
                     onOpenSettings={() => { setSettingsOpen(true); setMobileMenuOpen(false); }}
+                    user={user}
+                    onLogin={handleLogin}
+                    onLogout={handleLogout}
                   />
               </div>
           </div>
       )}
 
       {/* Desktop Sidebar */}
-      <div className="hidden md:flex shrink-0 h-full w-64">
+      <div className="hidden md:flex shrink-0 h-full w-64 z-20 shadow-lg">
           <Sidebar 
             currentFeed={currentFeed}
             currentSub={currentSub}
@@ -530,16 +610,19 @@ const App: React.FC = () => {
             blockedCount={blockedCount}
             blockedCommentCount={blockedCommentCount}
             onOpenSettings={() => setSettingsOpen(true)}
+            user={user}
+            onLogin={handleLogin}
+            onLogout={handleLogout}
           />
       </div>
 
       {/* Pull to Refresh Indicator */}
       <div className="fixed top-20 left-0 right-0 md:left-64 z-0 flex justify-center pointer-events-none">
          <div 
-             className="bg-white dark:bg-stone-800 p-2 rounded-full shadow-md border border-stone-200 dark:border-stone-700 flex items-center justify-center transition-opacity"
+             className="bg-white dark:bg-stone-800 p-2.5 rounded-full shadow-lg border border-stone-200 dark:border-stone-700 flex items-center justify-center transition-all duration-200 ease-out"
              style={{ 
                  opacity: Math.min(pullY / 40, 1), 
-                 transform: `scale(${Math.min(pullY/50, 1)})`,
+                 transform: `scale(${Math.min(pullY/50, 1)}) translateY(${pullY * 0.2}px)`,
                  visibility: pullY > 0 || isRefreshing ? 'visible' : 'hidden'
              }}
          >
@@ -558,35 +641,35 @@ const App: React.FC = () => {
         className="flex-1 h-full overflow-y-auto w-full relative z-10 bg-stone-100 dark:bg-stone-950 scroll-smooth"
         style={{ 
             transform: `translateY(${pullY}px)`, 
-            transition: isPulling ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' 
+            transition: isPulling ? 'none' : 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)' 
         }}
       >
          <div className="max-w-[1800px] mx-auto px-4 pt-16 md:pt-8 md:px-6 pb-8">
             {/* Search Bar */}
-            <form onSubmit={handleSearchSubmit} className="relative mb-4 group max-w-3xl mx-auto">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Search className="h-5 w-5 text-stone-400 group-focus-within:text-emerald-500 transition-colors" />
+            <form onSubmit={handleSearchSubmit} className="relative mb-6 group max-w-3xl mx-auto transform transition-all duration-300 hover:scale-[1.01]">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Search className="h-5 w-5 text-stone-400 group-focus-within:text-emerald-500 transition-colors duration-300" />
                 </div>
                 <input
                     type="text"
                     value={searchInput}
                     onChange={(e) => setSearchInput(e.target.value)}
                     placeholder="Search Reddit..."
-                    className="block w-full pl-10 pr-3 py-2.5 border border-stone-200 dark:border-stone-800 rounded-xl leading-5 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all shadow-sm"
+                    className="block w-full pl-11 pr-4 py-3 border border-stone-200 dark:border-stone-800 rounded-2xl leading-5 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-all shadow-sm group-focus-within:shadow-md"
                 />
             </form>
 
             {/* Toolbar */}
             <div className="flex items-center justify-between mb-6 max-w-3xl mx-auto xl:max-w-none">
-                <div className="flex items-center gap-2 overflow-x-auto pb-2 hide-scrollbar">
+                <div className="flex items-center gap-2 overflow-x-auto pb-2 hide-scrollbar mask-gradient-right">
                     {/* Sort Buttons */}
                     {(['hot', 'new', 'top', 'rising'] as SortOption[]).map((option) => (
                         <button
                         key={option}
                         onClick={() => setCurrentSort(option)}
-                        className={`px-4 py-2 rounded-full text-sm font-medium transition-all capitalize whitespace-nowrap ${
+                        className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 capitalize whitespace-nowrap btn-press ${
                             currentSort === option 
-                            ? 'bg-stone-800 text-white dark:bg-stone-100 dark:text-stone-900 shadow-md' 
+                            ? 'bg-stone-800 text-white dark:bg-stone-100 dark:text-stone-900 shadow-md transform scale-105' 
                             : 'bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-400 border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800'
                         }`}
                         >
@@ -596,11 +679,11 @@ const App: React.FC = () => {
 
                     {/* Top Time Select (Conditional) */}
                     {currentSort === 'top' && (
-                        <div className="relative shrink-0 animate-in fade-in slide-in-from-left-2 duration-200">
+                        <div className="relative shrink-0 animate-list-enter origin-left">
                         <select 
                             value={currentTopTime} 
                             onChange={(e) => setCurrentTopTime(e.target.value as TopTimeOption)}
-                            className="appearance-none bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-full pl-4 pr-8 py-2 text-sm font-medium text-stone-700 dark:text-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors"
+                            className="appearance-none bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-full pl-4 pr-9 py-2 text-sm font-medium text-stone-700 dark:text-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors"
                         >
                             <option value="hour">Now</option>
                             <option value="day">Today</option>
@@ -614,19 +697,19 @@ const App: React.FC = () => {
                     )}
                 </div>
 
-                <div className="flex items-center">
+                <div className="flex items-center gap-2">
                     {/* View Mode Toggle */}
-                    <div className="flex bg-white dark:bg-stone-900 rounded-lg border border-stone-200 dark:border-stone-800 p-1 mr-2 shrink-0">
+                    <div className="flex bg-white dark:bg-stone-900 rounded-lg border border-stone-200 dark:border-stone-800 p-1 shrink-0 shadow-sm">
                         <button 
                             onClick={() => setViewMode('card')}
-                            className={`p-1.5 rounded-md transition-all ${viewMode === 'card' ? 'bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-sm' : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}
+                            className={`p-1.5 rounded-md transition-all duration-200 ${viewMode === 'card' ? 'bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-sm' : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}
                             title="Card View"
                         >
                             <LayoutGrid size={18} />
                         </button>
                         <button 
                             onClick={() => setViewMode('compact')}
-                            className={`p-1.5 rounded-md transition-all ${viewMode === 'compact' ? 'bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-sm' : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}
+                            className={`p-1.5 rounded-md transition-all duration-200 ${viewMode === 'compact' ? 'bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-sm' : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}
                             title="Compact View"
                         >
                             <List size={18} />
@@ -635,10 +718,10 @@ const App: React.FC = () => {
 
                     <button 
                         onClick={() => loadPosts(false)} 
-                        className={`p-2 rounded-full hover:bg-stone-200 dark:hover:bg-stone-800 transition-colors shrink-0 ${loading ? 'animate-spin' : ''}`}
+                        className={`p-2 rounded-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-all duration-200 shrink-0 shadow-sm btn-press ${loading ? 'animate-spin' : ''}`}
                         title="Refresh"
                     >
-                        <RefreshCw size={20} className="text-stone-500" />
+                        <RefreshCw size={18} className="text-stone-500 dark:text-stone-400" />
                     </button>
                 </div>
             </div>
@@ -649,16 +732,16 @@ const App: React.FC = () => {
                     {[1,2,3,4,5,6].map(i => <PostSkeleton key={i} viewMode={viewMode} />)}
                 </div>
             ) : error ? (
-                <div className="flex flex-col items-center justify-center py-20 text-center">
+                <div className="flex flex-col items-center justify-center py-20 text-center animate-list-enter">
                     <CloudOff size={48} className="text-stone-300 mb-4" />
-                    <h3 className="text-xl font-medium text-stone-600 dark:text-stone-400">Connection Error</h3>
+                    <h3 className="text-xl font-medium text-stone-600 dark:text-stone-400 Connection Error">Connection Error</h3>
                     <p className="text-stone-500 dark:text-stone-500 mt-2 mb-6 max-w-sm">{error}</p>
-                    <button onClick={() => loadPosts(false)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">Try Again</button>
+                    <button onClick={() => loadPosts(false)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 btn-press">Try Again</button>
                 </div>
             ) : (
                 <>
                     {posts.length === 0 && !loading && !analyzing ? (
-                        <div className="flex flex-col items-center justify-center py-20 text-center">
+                        <div className="flex flex-col items-center justify-center py-20 text-center animate-list-enter">
                             <TriangleAlert size={48} className="text-stone-300 mb-4" />
                             <h3 className="text-xl font-medium text-stone-600 dark:text-stone-400">No Posts Found</h3>
                             <p className="text-stone-500 dark:text-stone-500 mt-2 max-w-sm">
@@ -668,16 +751,17 @@ const App: React.FC = () => {
                         </div>
                     ) : (
                         <div className={viewMode === 'card' ? "columns-1 md:columns-2 xl:columns-3 gap-6" : "flex flex-col gap-3 max-w-4xl mx-auto pb-4"}>
-                            {posts.map(post => (
-                                <PostCard 
-                                    key={post.id} 
-                                    post={post} 
-                                    isSeen={!!seenPosts[post.id]}
-                                    onClick={handlePostClick}
-                                    onNavigateSub={handlePostNavigateSub}
-                                    onImageClick={handleGalleryClick}
-                                    viewMode={viewMode}
-                                />
+                            {posts.map((post, index) => (
+                                <div key={post.id} className="animate-list-enter" style={{ animationDelay: `${index * 50}ms` }}>
+                                    <PostCard 
+                                        post={post} 
+                                        isSeen={!!seenPosts[post.id]}
+                                        onClick={handlePostClick}
+                                        onNavigateSub={handlePostNavigateSub}
+                                        onImageClick={handleGalleryClick}
+                                        viewMode={viewMode}
+                                    />
+                                </div>
                             ))}
                         </div>
                     )}

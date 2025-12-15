@@ -1,5 +1,6 @@
 
 
+
 // Reddit API Types
 
 export interface RedditPostData {
@@ -141,4 +142,21 @@ export interface CommentAnalysis {
   id: string;
   isToxic: boolean;
   reason?: string;
+}
+
+// User & Cloud Sync Types
+export interface UserProfile {
+  uid: string;
+  displayName: string | null;
+  email: string | null;
+  photoURL: string | null;
+}
+
+export interface FirebaseConfig {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  storageBucket: string;
+  messagingSenderId: string;
+  appId: string;
 }

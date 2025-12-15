@@ -42,6 +42,17 @@
             },
             fontFamily: {
               sans: ['Inter', 'sans-serif'],
+            },
+            animation: {
+              'blob': 'blob 7s infinite',
+            },
+            keyframes: {
+              blob: {
+                '0%': { transform: 'translate(0px, 0px) scale(1)' },
+                '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
+                '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
+                '100%': { transform: 'translate(0px, 0px) scale(1)' },
+              }
             }
           },
         },
@@ -54,32 +65,102 @@
         background-color: #f5f5f4; /* stone-100 */
         /* Prevent native pull-to-refresh on mobile chrome to allow custom implementation */
         overscroll-behavior-y: none;
+        -webkit-tap-highlight-color: transparent;
       }
       .dark body {
         background-color: #0c0a09; /* stone-950 */
       }
-      /* Custom scrollbar for webkit */
-      ::-webkit-scrollbar {
-        width: 8px;
+      
+      /* --- Next Gen Animations & Physics --- */
+      :root {
+        --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        --ease-out-circ: cubic-bezier(0.075, 0.82, 0.165, 1);
+        --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
+        --ease-smooth: cubic-bezier(0.2, 0.8, 0.2, 1);
       }
-      ::-webkit-scrollbar-track {
-        background: #e7e5e4; 
+
+      /* Staggered List Entry */
+      @keyframes list-enter {
+        0% { opacity: 0; transform: translateY(30px) scale(0.95); filter: blur(8px); }
+        100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
       }
-      .dark ::-webkit-scrollbar-track {
-        background: #1c1917; 
+      .animate-list-enter {
+        animation: list-enter 0.6s var(--ease-out-expo) backwards;
       }
-      ::-webkit-scrollbar-thumb {
-        background: #a8a29e; 
-        border-radius: 4px;
+
+      /* Modal Spring */
+      @keyframes modal-spring-up {
+        0% { opacity: 0; transform: translateY(100%) scale(0.95); }
+        100% { opacity: 1; transform: translateY(0) scale(1); }
       }
-      .dark ::-webkit-scrollbar-thumb {
-        background: #57534e; 
+      .animate-modal-spring {
+        animation: modal-spring-up 0.5s var(--ease-out-expo) forwards;
       }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #78716c; 
+
+      /* Zen Card Interaction Physics */
+      .zen-card {
+        transition: transform 0.4s var(--ease-out-expo), box-shadow 0.4s var(--ease-out-expo), filter 0.3s ease;
+        will-change: transform;
+        backface-visibility: hidden;
+      }
+      @media (hover: hover) {
+        .zen-card:hover {
+          transform: translateY(-4px) scale(1.01);
+          box-shadow: 0 20px 40px -10px rgba(0,0,0,0.12);
+          z-index: 10;
+        }
+      }
+      .zen-card:active {
+        transform: scale(0.96);
+        box-shadow: 0 5px 15px -5px rgba(0,0,0,0.1);
       }
       
-      /* Hide scrollbar utilities */
+      /* Button Press Physics */
+      .btn-press {
+        transition: transform 0.15s var(--ease-out-circ), background-color 0.2s ease, opacity 0.2s ease;
+      }
+      .btn-press:active {
+        transform: scale(0.92);
+        opacity: 0.8;
+      }
+
+      /* Navigation Item Hover */
+      .nav-item-hover {
+        transition: transform 0.3s var(--ease-out-expo), background-color 0.2s ease, color 0.2s ease;
+      }
+      .nav-item-hover:hover {
+        transform: translateX(4px);
+      }
+
+      /* Glassmorphism Utilities */
+      .glass {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+      .dark .glass {
+        background: rgba(28, 25, 23, 0.7);
+      }
+
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #d6d3d1;
+        border-radius: 3px;
+      }
+      .dark ::-webkit-scrollbar-thumb {
+        background: #44403c;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #a8a29e;
+      }
+      
       .hide-scrollbar::-webkit-scrollbar {
         display: none;
       }
@@ -87,58 +168,23 @@
         -ms-overflow-style: none;
         scrollbar-width: none;
       }
-
-      /* Animation Utilities */
-      .grid-rows-0 { grid-template-rows: 0fr; }
-      .grid-rows-1 { grid-template-rows: 1fr; }
       
-      @keyframes progress-indeterminate {
-        0% { transform: translateX(-100%); }
-        100% { transform: translateX(300%); }
+      @keyframes gradient-x {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
       }
-      .animate-progress-indeterminate {
-        animation: progress-indeterminate 1.5s infinite cubic-bezier(0.4, 0.0, 0.2, 1);
+      .animate-gradient-x {
+        background-size: 200% 200%;
+        animation: gradient-x 6s ease infinite;
       }
-
-      /* Animations */
-      @keyframes slide-up {
-        from { transform: translateY(100%); }
-        to { transform: translateY(0); }
+      
+      @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
       }
-      .animate-slide-up {
-        animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-      }
-
-      @keyframes fade-in {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-      .animate-fade-in {
-        animation: fade-in 0.3s ease-out forwards;
-      }
-
-      @keyframes scale-in {
-        from { opacity: 0; transform: scale(0.95); }
-        to { opacity: 1; transform: scale(1); }
-      }
-      .animate-scale-in {
-        animation: scale-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-      }
-
-      @keyframes slide-up-modal {
-        from { opacity: 0; transform: translateY(20px) scale(0.98); }
-        to { opacity: 1; transform: translateY(0) scale(1); }
-      }
-      .animate-slide-up-modal {
-        animation: slide-up-modal 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-      }
-
-      @keyframes enter-card {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-      .animate-enter-card {
-        animation: enter-card 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+      .animate-float {
+        animation: float 6s ease-in-out infinite;
       }
     </style>
 <script type="importmap">
@@ -154,7 +200,11 @@
     "date-fns": "https://esm.sh/date-fns@^4.1.0",
     "hls.js": "https://esm.sh/hls.js@^1.5.8",
     "react-markdown": "https://esm.sh/react-markdown@9.0.1",
-    "remark-gfm": "https://esm.sh/remark-gfm@4.0.0"
+    "remark-gfm": "https://esm.sh/remark-gfm@4.0.0",
+    "firebase/app": "https://esm.sh/firebase@10.8.1/app",
+    "firebase/auth": "https://esm.sh/firebase@10.8.1/auth",
+    "firebase/firestore": "https://esm.sh/firebase@10.8.1/firestore",
+    "firebase/": "https://esm.sh/firebase@^12.6.0/"
   }
 }
 </script>

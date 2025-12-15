@@ -1,8 +1,10 @@
 
 
+
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, CircleAlert, Loader2, Shield, Key, Check, Search, Sparkles, Layers, Type, MessageSquare } from 'lucide-react';
-import { AIConfig, AIProvider } from '../types';
+import { X, Save, CircleAlert, Loader2, Shield, Key, Check, Search, Sparkles, Layers, Type, MessageSquare, Cloud, CheckCircle2 } from 'lucide-react';
+import { AIConfig, AIProvider, FirebaseConfig } from '../types';
+import { firebaseService } from '../services/firebaseService';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -28,6 +30,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [localPageSize, setLocalPageSize] = useState(pageSize);
   const [localTextSize, setLocalTextSize] = useState(textSize);
   
+  // Cloud Sync State
+  const [firebaseConfigStr, setFirebaseConfigStr] = useState('');
+  const [isFirebaseConfigured, setIsFirebaseConfigured] = useState(false);
+
   // New state for models
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
@@ -45,6 +51,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       setAnalyzeComments(config.analyzeComments || false);
       setLocalPageSize(pageSize);
       setLocalTextSize(textSize);
+
+      // Load Firebase Config
+      const savedFb = localStorage.getItem('zen_firebase_config');
+      if (savedFb) {
+          setFirebaseConfigStr(savedFb);
+          try {
+              const parsed = JSON.parse(savedFb);
+              if (parsed.apiKey && parsed.projectId) setIsFirebaseConfigured(true);
+          } catch (e) {}
+      }
     }
   }, [isOpen, config, pageSize, textSize]);
 
@@ -61,7 +77,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // Effect to fetch models when key changes
   useEffect(() => {
-    // Debounce the fetch to avoid hitting API on every keystroke
     const timeoutId = setTimeout(async () => {
         if (openRouterKey.trim().length > 5 && models.length === 0) {
             setLoadingModels(true);
@@ -90,7 +105,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     }, 800);
 
     return () => clearTimeout(timeoutId);
-  }, [openRouterKey, models.length]); // Added models.length to dependency to prevent refetch if already loaded
+  }, [openRouterKey, models.length]);
 
 
   const handleSave = () => {
@@ -104,6 +119,26 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     });
     onPageSizeChange(localPageSize);
     onTextSizeChange(localTextSize);
+    
+    // Save Firebase Config
+    if (firebaseConfigStr.trim()) {
+        try {
+            // Validate JSON
+            const parsed = JSON.parse(firebaseConfigStr);
+            if (parsed.apiKey) {
+                localStorage.setItem('zen_firebase_config', firebaseConfigStr);
+                // Attempt to init immediately
+                firebaseService.initialize(parsed);
+                window.location.reload(); // Reload to ensure auth state binds correctly
+            }
+        } catch (e) {
+            alert("Invalid JSON for Firebase Config");
+            return;
+        }
+    } else {
+        localStorage.removeItem('zen_firebase_config');
+    }
+
     onClose();
   };
 
@@ -117,7 +152,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const filteredModels = models.filter(m => 
     m.name.toLowerCase().includes(openRouterModel.toLowerCase()) || 
     m.id.toLowerCase().includes(openRouterModel.toLowerCase())
-  ).slice(0, 50); // Limit to 50 results for performance
+  ).slice(0, 50);
 
   if (!isOpen) return null;
 
@@ -238,6 +273,41 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <div className="border-t border-stone-100 dark:border-stone-800"></div>
+            
+            {/* Cloud Sync Section */}
+            <div>
+                 <div className="flex items-center justify-between mb-2">
+                    <label className="flex items-center gap-2 text-sm font-medium text-stone-700 dark:text-stone-300">
+                        <Cloud size={16} />
+                        Cloud Sync (Firebase)
+                    </label>
+                    {isFirebaseConfigured && (
+                        <div className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                            <CheckCircle2 size={10} />
+                            Configured
+                        </div>
+                    )}
+                 </div>
+                 
+                 <p className="text-xs text-stone-500 dark:text-stone-400 mb-3">
+                     To enable login and sync your followed subreddits across devices, create a <a href="https://console.firebase.google.com/" target="_blank" className="text-emerald-500 hover:underline">Firebase project</a>, enable Google Auth & Firestore, and paste the config object below.
+                 </p>
+
+                 <textarea
+                    value={firebaseConfigStr}
+                    onChange={(e) => setFirebaseConfigStr(e.target.value)}
+                    placeholder='{"apiKey": "...", "authDomain": "...", "projectId": "..."}'
+                    className="w-full h-24 bg-stone-50 dark:bg-stone-950/50 border border-stone-200 dark:border-stone-700 rounded-lg px-3 py-2 text-xs font-mono text-stone-700 dark:text-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none transition-shadow"
+                    spellCheck={false}
+                 />
+                 {isFirebaseConfigured && (
+                    <div className="mt-2 text-[10px] text-stone-400 flex items-center gap-1">
+                        <span>Remember to add your domain to Authorized Domains in Firebase Console.</span>
+                    </div>
+                 )}
             </div>
 
             <div className="border-t border-stone-100 dark:border-stone-800"></div>
