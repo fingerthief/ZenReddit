@@ -4,7 +4,7 @@ import React, { useEffect, useState, useRef, useMemo, memo } from 'react';
 import { FilteredPost, RedditComment, RedditListing, CommentAnalysis, AIConfig } from '../types';
 import { fetchComments } from '../services/redditService';
 import { analyzeCommentsForZen } from '../services/aiService';
-import { X, ExternalLink, Loader2, ArrowBigUp, ChevronLeft, ChevronRight, ChevronDown, MessageSquare, Images, Plus, MoreHorizontal, ShieldAlert, Eye } from 'lucide-react';
+import { X, ExternalLink, Loader2, ArrowBigUp, ChevronLeft, ChevronRight, ChevronDown, MessageSquare, Images, Plus, MoreHorizontal, ShieldAlert, Eye, Captions } from 'lucide-react';
 import Hls from 'hls.js';
 import { formatDistanceToNow } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
@@ -361,7 +361,7 @@ const CommentNode: React.FC<{
                 onClick={toggleCollapse}
             >
                 {/* The visible line */}
-                <div className="w-[2px] h-full bg-stone-100 dark:bg-stone-800 group-hover/line:bg-emerald-400 dark:group-hover/line:bg-emerald-600/50 transition-colors rounded-full my-1"></div>
+                <div className="w-full h-full bg-transparent border-l-2 border-stone-100 dark:border-stone-800 group-hover/line:border-emerald-400 dark:group-hover/line:border-emerald-600/50 transition-colors my-1 ml-[50%]"></div>
             </div>
 
             {/* Main Content Column */}
@@ -464,7 +464,12 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
   const [commentAnalysisMap, setCommentAnalysisMap] = useState<Record<string, CommentAnalysis>>({});
   
   const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Subtitle State
+  const [hasSubtitles, setHasSubtitles] = useState(false);
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
 
   useEffect(() => {
     // Lock body scroll when modal is open
@@ -510,12 +515,27 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
     const video = post.secure_media?.reddit_video;
     if (!video || !videoRef.current) return;
 
-    let hls: Hls | null = null;
     const videoEl = videoRef.current;
+    
+    // Reset state
+    setHasSubtitles(false);
+    setSubtitlesEnabled(false);
 
     // Prioritize HLS URL if available (this combines audio/video)
     if (Hls.isSupported() && video.hls_url) {
-        hls = new Hls();
+        if (hlsRef.current) hlsRef.current.destroy();
+        
+        const hls = new Hls({
+            enableWebVTT: true,
+            capLevelToPlayerSize: true
+        });
+        hlsRef.current = hls;
+
+        hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, () => {
+            setHasSubtitles(hls.subtitleTracks.length > 0);
+            setSubtitlesEnabled(hls.subtitleTrack !== -1);
+        });
+
         hls.loadSource(video.hls_url);
         hls.attachMedia(videoEl);
     } else if (videoEl.canPlayType('application/vnd.apple.mpegurl') && video.hls_url) {
@@ -527,9 +547,24 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
     }
 
     return () => {
-        if (hls) hls.destroy();
+        if (hlsRef.current) {
+            hlsRef.current.destroy();
+            hlsRef.current = null;
+        }
     };
   }, [post.secure_media]);
+
+  const toggleSubtitles = () => {
+    if (hlsRef.current) {
+        if (subtitlesEnabled) {
+            hlsRef.current.subtitleTrack = -1;
+            setSubtitlesEnabled(false);
+        } else {
+            hlsRef.current.subtitleTrack = 0; // Default to first track
+            setSubtitlesEnabled(true);
+        }
+    }
+  };
 
   const decodeHtml = (html: string | undefined | null) => {
     if (!html) return "";
@@ -562,13 +597,25 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
     // 1. Video
     if (post.secure_media?.reddit_video) {
         return (
-            <video 
-                ref={videoRef}
-                controls 
-                className="w-full rounded-xl mb-6 bg-black shadow-lg max-h-[60vh] mx-auto" 
-                playsInline
-                poster={post.thumbnail && post.thumbnail.startsWith('http') ? post.thumbnail : undefined}
-            />
+            <div className="relative mb-6 mx-auto w-full bg-black rounded-xl shadow-lg max-h-[60vh] group">
+                <video 
+                    ref={videoRef}
+                    controls 
+                    className="w-full h-full object-contain max-h-[60vh] rounded-xl" 
+                    playsInline
+                    poster={post.thumbnail && post.thumbnail.startsWith('http') ? post.thumbnail : undefined}
+                />
+                
+                {hasSubtitles && (
+                     <button
+                        onClick={toggleSubtitles}
+                        className={`absolute top-4 right-4 z-10 p-2 rounded-full backdrop-blur-md transition-colors ${subtitlesEnabled ? 'bg-emerald-600 text-white' : 'bg-black/60 text-white hover:bg-black/80'}`}
+                        title="Toggle Captions"
+                     >
+                        <Captions size={20} />
+                     </button>
+                )}
+            </div>
         )
     }
 

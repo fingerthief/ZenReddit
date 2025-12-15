@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, Download, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Images } from 'lucide-react';
+import { X, Download, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Images, Captions } from 'lucide-react';
 import { GalleryItem } from '../types';
 import Hls from 'hls.js';
 
@@ -19,6 +19,10 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ items, initialIndex = 0, onCl
   const [dragOffset, setDragOffset] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  
+  // Subtitle State
+  const [hasSubtitles, setHasSubtitles] = useState(false);
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
   
   const containerRef = useRef<HTMLDivElement>(null);
   
@@ -61,7 +65,19 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ items, initialIndex = 0, onCl
             // HLS setup for current if needed
             const item = items[idx];
             if (item.type === 'video' && item.videoSources?.hls && Hls.isSupported() && !hlsInstances.current.has(idx)) {
-                 const hls = new Hls();
+                 const hls = new Hls({
+                     enableWebVTT: true,
+                     capLevelToPlayerSize: true
+                 });
+                 
+                 // Listener for subtitles to update state if this is the current video
+                 hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, () => {
+                     if (idx === currentIndex) {
+                        setHasSubtitles(hls.subtitleTracks.length > 0);
+                        setSubtitlesEnabled(hls.subtitleTrack !== -1);
+                     }
+                 });
+
                  hls.loadSource(item.videoSources.hls);
                  hls.attachMedia(vid);
                  hlsInstances.current.set(idx, hls);
@@ -71,6 +87,32 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ items, initialIndex = 0, onCl
         }
     });
   }, [currentIndex, items]);
+
+  // Sync subtitle state when changing slides
+  useEffect(() => {
+      const hls = hlsInstances.current.get(currentIndex);
+      if (hls && hls.subtitleTracks.length > 0) {
+          setHasSubtitles(true);
+          setSubtitlesEnabled(hls.subtitleTrack !== -1);
+      } else {
+          setHasSubtitles(false);
+          setSubtitlesEnabled(false);
+      }
+  }, [currentIndex]);
+
+  const toggleSubtitles = () => {
+      const hls = hlsInstances.current.get(currentIndex);
+      if (hls) {
+          if (subtitlesEnabled) {
+              hls.subtitleTrack = -1;
+              setSubtitlesEnabled(false);
+          } else {
+              // Enable first track usually (index 0)
+              hls.subtitleTrack = 0; 
+              setSubtitlesEnabled(true);
+          }
+      }
+  };
 
   const handleNext = useCallback(() => {
     if (currentIndex < items.length - 1) setCurrentIndex(c => c + 1);
@@ -252,6 +294,18 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ items, initialIndex = 0, onCl
                         <span>{currentIndex + 1} / {items.length}</span>
                      </div>
                  )}
+                 
+                 {/* CC Button */}
+                 {hasSubtitles && (
+                     <button 
+                        onClick={toggleSubtitles}
+                        className={`p-2 rounded-full backdrop-blur-md transition-colors pointer-events-auto ${subtitlesEnabled ? 'bg-emerald-600 text-white' : 'bg-black/40 text-white hover:bg-white/20'}`}
+                        title="Toggle Captions"
+                     >
+                        <Captions size={24} />
+                     </button>
+                 )}
+
                  <button 
                     onClick={handleDownload}
                     className="p-2 bg-black/40 text-white rounded-full backdrop-blur-md hover:bg-white/20 transition-colors pointer-events-auto"

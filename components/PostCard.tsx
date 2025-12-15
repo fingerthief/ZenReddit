@@ -228,7 +228,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
       
       return (
         <div 
-           className={`bg-white dark:bg-stone-900 rounded-lg shadow-sm border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-all cursor-pointer flex overflow-hidden ${isSeen ? 'opacity-60' : ''}`}
+           className={`bg-white dark:bg-stone-900 rounded-lg shadow-sm border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-all cursor-pointer flex overflow-hidden w-full ${isSeen ? 'opacity-60' : ''}`}
            onClick={() => onClick(post)}
         >
             {hasThumb && (
@@ -293,7 +293,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
   // --- CARD VIEW ---
   return (
     <div 
-      className={`bg-white dark:bg-stone-900 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 hover:shadow-md transition-all duration-300 mb-4 break-inside-avoid animate-enter-card flex flex-col cursor-pointer ${isSeen ? 'opacity-80' : ''}`}
+      className={`bg-white dark:bg-stone-900 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 hover:shadow-md transition-all duration-300 mb-6 break-inside-avoid animate-enter-card flex flex-col cursor-pointer w-full ${isSeen ? 'opacity-80' : ''}`}
       onClick={() => onClick(post)}
     >
       <div className="p-4 flex flex-col h-full">

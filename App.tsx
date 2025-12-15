@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import PostCard from './components/PostCard';
@@ -25,10 +23,10 @@ const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
 
 const SEEN_EXPIRY_MS = 72 * 60 * 60 * 1000;
 
-const PostSkeleton = ({ viewMode }: { viewMode: ViewMode }) => {
+const PostSkeleton: React.FC<{ viewMode: ViewMode }> = ({ viewMode }) => {
     if (viewMode === 'compact') {
         return (
-            <div className="bg-white dark:bg-stone-900 rounded-lg shadow-sm border border-stone-200 dark:border-stone-800 mb-2 animate-pulse flex overflow-hidden">
+            <div className="bg-white dark:bg-stone-900 rounded-lg shadow-sm border border-stone-200 dark:border-stone-800 mb-2 animate-pulse flex overflow-hidden w-full">
                  <div className="w-[80px] h-[80px] sm:w-[110px] sm:h-auto bg-stone-200 dark:bg-stone-800 shrink-0"></div>
                  <div className="flex-1 p-2 sm:p-3 flex flex-col justify-between min-w-0">
                      <div className="space-y-2 w-full">
@@ -45,7 +43,7 @@ const PostSkeleton = ({ viewMode }: { viewMode: ViewMode }) => {
     }
     
     return (
-      <div className="bg-white dark:bg-stone-900 p-4 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 mb-4 animate-pulse break-inside-avoid">
+      <div className="bg-white dark:bg-stone-900 p-4 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 mb-4 animate-pulse break-inside-avoid w-full">
         <div className="flex items-center gap-2 mb-3">
             <div className="w-6 h-6 bg-stone-200 dark:bg-stone-800 rounded-full"></div>
             <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-24"></div>
@@ -160,6 +158,7 @@ const App: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const observerTarget = useRef<HTMLDivElement>(null);
+  const mainScrollRef = useRef<HTMLDivElement>(null);
   
   // Touch / Gestures state
   const touchStartRef = useRef<{x: number, y: number} | null>(null);
@@ -281,6 +280,9 @@ const App: React.FC = () => {
     setMobileMenuOpen(false);
     if (selectedPost) handlePostClose();
     setViewingGallery(null);
+    
+    // Scroll back to top on navigate
+    if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -295,8 +297,12 @@ const App: React.FC = () => {
       if (viewingGallery || selectedPost || settingsOpen) return;
       
       touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      // Check if we are at the top allowing for some float precision or sub-pixel rendering
-      isAtTopRef.current = window.scrollY <= 1; 
+      // Check scroll on the main element
+      if (mainScrollRef.current) {
+          isAtTopRef.current = mainScrollRef.current.scrollTop <= 1;
+      } else {
+          isAtTopRef.current = window.scrollY <= 1; 
+      }
       setIsPulling(false); // Reset pulling state
   };
 
@@ -310,11 +316,16 @@ const App: React.FC = () => {
     // Pull to Refresh Logic
     // Only engage if we started at the top AND we are still currently at the top
     // AND the pull is downward and substantially vertical
-    if (isAtTopRef.current && dy > 0 && Math.abs(dy) > Math.abs(dx) && window.scrollY <= 1) {
-        const resistance = 0.45;
-        const newPullY = Math.min(dy * resistance, 150);
-        setPullY(newPullY);
-        setIsPulling(true);
+    if (isAtTopRef.current && dy > 0 && Math.abs(dy) > Math.abs(dx)) {
+        // Double check scroll pos just in case
+        const currentScroll = mainScrollRef.current ? mainScrollRef.current.scrollTop : window.scrollY;
+        
+        if (currentScroll <= 1) {
+             const resistance = 0.45;
+             const newPullY = Math.min(dy * resistance, 150);
+             setPullY(newPullY);
+             setIsPulling(true);
+        }
     }
   };
 
@@ -457,7 +468,10 @@ const App: React.FC = () => {
           if (entries[0].isIntersecting) {
               loadPosts(true);
           }
-      }, { threshold: 0.1 });
+      }, { 
+          threshold: 0.1,
+          root: mainScrollRef.current // Observe within scroll container
+      });
       
       observer.observe(observerTarget.current);
       return () => observer.disconnect();
@@ -466,7 +480,7 @@ const App: React.FC = () => {
 
   return (
     <div 
-        className="flex bg-stone-100 dark:bg-stone-950 min-h-screen text-stone-900 dark:text-stone-100 transition-colors font-sans overflow-x-hidden relative" 
+        className="flex bg-stone-100 dark:bg-stone-950 h-screen w-full overflow-hidden font-sans text-stone-900 dark:text-stone-100 transition-colors" 
         onTouchStart={handleTouchStart} 
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -503,7 +517,7 @@ const App: React.FC = () => {
       )}
 
       {/* Desktop Sidebar */}
-      <div className="hidden md:block">
+      <div className="hidden md:flex shrink-0 h-full w-64">
           <Sidebar 
             currentFeed={currentFeed}
             currentSub={currentSub}
@@ -539,141 +553,144 @@ const App: React.FC = () => {
 
       {/* Main Content */}
       <main 
-        className="flex-1 w-full max-w-[1800px] mx-auto px-4 pt-16 md:pt-8 md:px-6 pb-8 min-h-screen relative z-10 bg-stone-100 dark:bg-stone-950"
+        id="main-scroll"
+        ref={mainScrollRef}
+        className="flex-1 h-full overflow-y-auto w-full relative z-10 bg-stone-100 dark:bg-stone-950 scroll-smooth"
         style={{ 
             transform: `translateY(${pullY}px)`, 
             transition: isPulling ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' 
         }}
       >
-         
-         {/* Search Bar */}
-         <form onSubmit={handleSearchSubmit} className="relative mb-4 group max-w-3xl mx-auto">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-5 w-5 text-stone-400 group-focus-within:text-emerald-500 transition-colors" />
-            </div>
-            <input
-                type="text"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search Reddit..."
-                className="block w-full pl-10 pr-3 py-2.5 border border-stone-200 dark:border-stone-800 rounded-xl leading-5 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all shadow-sm"
-            />
-         </form>
-
-         {/* Toolbar */}
-         <div className="flex items-center justify-between mb-6 max-w-3xl mx-auto xl:max-w-none">
-             <div className="flex items-center gap-2 overflow-x-auto pb-2 hide-scrollbar">
-                 {/* Sort Buttons */}
-                 {(['hot', 'new', 'top', 'rising'] as SortOption[]).map((option) => (
-                    <button
-                      key={option}
-                      onClick={() => setCurrentSort(option)}
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-all capitalize whitespace-nowrap ${
-                        currentSort === option 
-                          ? 'bg-stone-800 text-white dark:bg-stone-100 dark:text-stone-900 shadow-md' 
-                          : 'bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-400 border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800'
-                      }`}
-                    >
-                      {option}
-                    </button>
-                 ))}
-
-                 {/* Top Time Select (Conditional) */}
-                 {currentSort === 'top' && (
-                    <div className="relative shrink-0 animate-in fade-in slide-in-from-left-2 duration-200">
-                       <select 
-                          value={currentTopTime} 
-                          onChange={(e) => setCurrentTopTime(e.target.value as TopTimeOption)}
-                          className="appearance-none bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-full pl-4 pr-8 py-2 text-sm font-medium text-stone-700 dark:text-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors"
-                       >
-                          <option value="hour">Now</option>
-                          <option value="day">Today</option>
-                          <option value="week">Week</option>
-                          <option value="month">Month</option>
-                          <option value="year">Year</option>
-                          <option value="all">All Time</option>
-                       </select>
-                       <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-500 pointer-events-none" />
-                    </div>
-                 )}
-             </div>
-
-             <div className="flex items-center">
-                {/* View Mode Toggle */}
-                <div className="flex bg-white dark:bg-stone-900 rounded-lg border border-stone-200 dark:border-stone-800 p-1 mr-2 shrink-0">
-                    <button 
-                        onClick={() => setViewMode('card')}
-                        className={`p-1.5 rounded-md transition-all ${viewMode === 'card' ? 'bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-sm' : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}
-                        title="Card View"
-                    >
-                        <LayoutGrid size={18} />
-                    </button>
-                    <button 
-                        onClick={() => setViewMode('compact')}
-                        className={`p-1.5 rounded-md transition-all ${viewMode === 'compact' ? 'bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-sm' : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}
-                        title="Compact View"
-                    >
-                        <List size={18} />
-                    </button>
+         <div className="max-w-[1800px] mx-auto px-4 pt-16 md:pt-8 md:px-6 pb-8">
+            {/* Search Bar */}
+            <form onSubmit={handleSearchSubmit} className="relative mb-4 group max-w-3xl mx-auto">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search className="h-5 w-5 text-stone-400 group-focus-within:text-emerald-500 transition-colors" />
                 </div>
+                <input
+                    type="text"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    placeholder="Search Reddit..."
+                    className="block w-full pl-10 pr-3 py-2.5 border border-stone-200 dark:border-stone-800 rounded-xl leading-5 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all shadow-sm"
+                />
+            </form>
 
-                <button 
-                    onClick={() => loadPosts(false)} 
-                    className={`p-2 rounded-full hover:bg-stone-200 dark:hover:bg-stone-800 transition-colors shrink-0 ${loading ? 'animate-spin' : ''}`}
-                    title="Refresh"
-                >
-                    <RefreshCw size={20} className="text-stone-500" />
-                </button>
-             </div>
-         </div>
+            {/* Toolbar */}
+            <div className="flex items-center justify-between mb-6 max-w-3xl mx-auto xl:max-w-none">
+                <div className="flex items-center gap-2 overflow-x-auto pb-2 hide-scrollbar">
+                    {/* Sort Buttons */}
+                    {(['hot', 'new', 'top', 'rising'] as SortOption[]).map((option) => (
+                        <button
+                        key={option}
+                        onClick={() => setCurrentSort(option)}
+                        className={`px-4 py-2 rounded-full text-sm font-medium transition-all capitalize whitespace-nowrap ${
+                            currentSort === option 
+                            ? 'bg-stone-800 text-white dark:bg-stone-100 dark:text-stone-900 shadow-md' 
+                            : 'bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-400 border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800'
+                        }`}
+                        >
+                        {option}
+                        </button>
+                    ))}
 
-         {/* Content Area */}
-         {loading && posts.length === 0 ? (
-             <div className={viewMode === 'card' ? "columns-1 md:columns-2 xl:columns-3 gap-4 md:gap-6 space-y-4 md:space-y-6" : "flex flex-col gap-3 max-w-4xl mx-auto"}>
-                 {[1,2,3,4,5,6].map(i => <PostSkeleton key={i} viewMode={viewMode} />)}
-             </div>
-         ) : error ? (
-             <div className="flex flex-col items-center justify-center py-20 text-center">
-                 <CloudOff size={48} className="text-stone-300 mb-4" />
-                 <h3 className="text-xl font-medium text-stone-600 dark:text-stone-400">Connection Error</h3>
-                 <p className="text-stone-500 dark:text-stone-500 mt-2 mb-6 max-w-sm">{error}</p>
-                 <button onClick={() => loadPosts(false)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">Try Again</button>
-             </div>
-         ) : (
-             <>
-                {posts.length === 0 && !loading && !analyzing ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-center">
-                        <TriangleAlert size={48} className="text-stone-300 mb-4" />
-                        <h3 className="text-xl font-medium text-stone-600 dark:text-stone-400">No Posts Found</h3>
-                        <p className="text-stone-500 dark:text-stone-500 mt-2 max-w-sm">
-                            Try adjusting your filters or checking a different subreddit. 
-                            If you have "Strict" filtering on, try relaxing it in settings.
-                        </p>
-                    </div>
-                ) : (
-                    <div className={viewMode === 'card' ? "columns-1 md:columns-2 xl:columns-3 gap-4 md:gap-6 space-y-4 md:space-y-6 pb-4" : "flex flex-col gap-3 max-w-4xl mx-auto pb-4"}>
-                        {posts.map(post => (
-                            <PostCard 
-                                key={post.id} 
-                                post={post} 
-                                isSeen={!!seenPosts[post.id]}
-                                onClick={handlePostClick}
-                                onNavigateSub={handlePostNavigateSub}
-                                onImageClick={handleGalleryClick}
-                                viewMode={viewMode}
-                            />
-                        ))}
-                    </div>
-                )}
-                
-                {/* Loader / Scanner at bottom */}
-                <div ref={observerTarget} className="py-8 flex flex-col items-center justify-center min-h-[100px] w-full">
-                    {(loading || analyzing) && (
-                         analyzing ? <ScanningVisualizer mode="compact" /> : <Loader2 className="animate-spin text-stone-400" size={32} />
+                    {/* Top Time Select (Conditional) */}
+                    {currentSort === 'top' && (
+                        <div className="relative shrink-0 animate-in fade-in slide-in-from-left-2 duration-200">
+                        <select 
+                            value={currentTopTime} 
+                            onChange={(e) => setCurrentTopTime(e.target.value as TopTimeOption)}
+                            className="appearance-none bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-full pl-4 pr-8 py-2 text-sm font-medium text-stone-700 dark:text-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors"
+                        >
+                            <option value="hour">Now</option>
+                            <option value="day">Today</option>
+                            <option value="week">Week</option>
+                            <option value="month">Month</option>
+                            <option value="year">Year</option>
+                            <option value="all">All Time</option>
+                        </select>
+                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-500 pointer-events-none" />
+                        </div>
                     )}
                 </div>
-             </>
-         )}
+
+                <div className="flex items-center">
+                    {/* View Mode Toggle */}
+                    <div className="flex bg-white dark:bg-stone-900 rounded-lg border border-stone-200 dark:border-stone-800 p-1 mr-2 shrink-0">
+                        <button 
+                            onClick={() => setViewMode('card')}
+                            className={`p-1.5 rounded-md transition-all ${viewMode === 'card' ? 'bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-sm' : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}
+                            title="Card View"
+                        >
+                            <LayoutGrid size={18} />
+                        </button>
+                        <button 
+                            onClick={() => setViewMode('compact')}
+                            className={`p-1.5 rounded-md transition-all ${viewMode === 'compact' ? 'bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-sm' : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}
+                            title="Compact View"
+                        >
+                            <List size={18} />
+                        </button>
+                    </div>
+
+                    <button 
+                        onClick={() => loadPosts(false)} 
+                        className={`p-2 rounded-full hover:bg-stone-200 dark:hover:bg-stone-800 transition-colors shrink-0 ${loading ? 'animate-spin' : ''}`}
+                        title="Refresh"
+                    >
+                        <RefreshCw size={20} className="text-stone-500" />
+                    </button>
+                </div>
+            </div>
+
+            {/* Content Area */}
+            {loading && posts.length === 0 ? (
+                <div className={viewMode === 'card' ? "columns-1 md:columns-2 xl:columns-3 gap-6" : "flex flex-col gap-3 max-w-4xl mx-auto"}>
+                    {[1,2,3,4,5,6].map(i => <PostSkeleton key={i} viewMode={viewMode} />)}
+                </div>
+            ) : error ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                    <CloudOff size={48} className="text-stone-300 mb-4" />
+                    <h3 className="text-xl font-medium text-stone-600 dark:text-stone-400">Connection Error</h3>
+                    <p className="text-stone-500 dark:text-stone-500 mt-2 mb-6 max-w-sm">{error}</p>
+                    <button onClick={() => loadPosts(false)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">Try Again</button>
+                </div>
+            ) : (
+                <>
+                    {posts.length === 0 && !loading && !analyzing ? (
+                        <div className="flex flex-col items-center justify-center py-20 text-center">
+                            <TriangleAlert size={48} className="text-stone-300 mb-4" />
+                            <h3 className="text-xl font-medium text-stone-600 dark:text-stone-400">No Posts Found</h3>
+                            <p className="text-stone-500 dark:text-stone-500 mt-2 max-w-sm">
+                                Try adjusting your filters or checking a different subreddit. 
+                                If you have "Strict" filtering on, try relaxing it in settings.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className={viewMode === 'card' ? "columns-1 md:columns-2 xl:columns-3 gap-6" : "flex flex-col gap-3 max-w-4xl mx-auto pb-4"}>
+                            {posts.map(post => (
+                                <PostCard 
+                                    key={post.id} 
+                                    post={post} 
+                                    isSeen={!!seenPosts[post.id]}
+                                    onClick={handlePostClick}
+                                    onNavigateSub={handlePostNavigateSub}
+                                    onImageClick={handleGalleryClick}
+                                    viewMode={viewMode}
+                                />
+                            ))}
+                        </div>
+                    )}
+                    
+                    {/* Loader / Scanner at bottom */}
+                    <div ref={observerTarget} className="py-8 flex flex-col items-center justify-center min-h-[100px] w-full">
+                        {(loading || analyzing) && (
+                            analyzing ? <ScanningVisualizer mode="compact" /> : <Loader2 className="animate-spin text-stone-400" size={32} />
+                        )}
+                    </div>
+                </>
+            )}
+         </div>
       </main>
 
       {/* Floating Action Button for Mobile Subreddit Switching */}

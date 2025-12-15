@@ -1,5 +1,4 @@
 
-
 import React, { useState } from 'react';
 import { Flame, Globe, Plus, Hash, X, Trash2, Moon, Sun, ShieldCheck, Settings, Search } from 'lucide-react';
 import { FeedType } from '../types';
@@ -51,7 +50,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <div className="w-full md:w-64 bg-white dark:bg-stone-900 border-r border-stone-200 dark:border-stone-800 h-full md:h-screen flex flex-col shrink-0 md:sticky md:top-0 transition-colors">
+    <div className="w-full md:w-64 bg-white dark:bg-stone-900 border-r border-stone-200 dark:border-stone-800 h-full flex flex-col shrink-0 transition-colors">
       {/* Header */}
       <div className="p-6 border-b border-stone-100 dark:border-stone-800 flex justify-between items-start shrink-0">
         <div>
