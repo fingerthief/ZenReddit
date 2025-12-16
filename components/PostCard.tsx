@@ -153,10 +153,17 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
     }
 
     if (previewSrc && (isVideo || isGallery || post.url.match(/\.(jpg|jpeg|png|gif|webp)$/i) || post.domain.includes('redd.it') || post.domain.includes('imgur'))) {
+         // Calculate aspect ratio style to prevent layout shift
+         const source = post.preview?.images?.[0]?.source;
+         const mediaStyle = (source?.width && source?.height) 
+            ? { aspectRatio: `${source.width} / ${source.height}` } 
+            : undefined;
+
          return (
              <div 
                 className="relative mt-3 rounded-xl overflow-hidden bg-stone-100 dark:bg-stone-800 cursor-pointer group/media shadow-inner"
                 onClick={handleMediaClick}
+                style={mediaStyle}
              >
                  <img 
                     src={previewSrc} 

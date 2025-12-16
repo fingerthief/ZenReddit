@@ -7,10 +7,10 @@ import ImageViewer from './components/ImageViewer';
 import SettingsModal from './components/SettingsModal';
 import ScanningVisualizer from './components/ScanningVisualizer';
 import QuickSubSwitcher from './components/QuickSubSwitcher';
-import { FeedType, FilteredPost, RedditPostData, AIConfig, SortOption, TopTimeOption, CachedAnalysis, GalleryItem, ViewMode, UserProfile } from './types';
+import LazyRender from './components/LazyRender';
+import { FeedType, FilteredPost, RedditPostData, AIConfig, SortOption, TopTimeOption, CachedAnalysis, GalleryItem, ViewMode } from './types';
 import { fetchFeed } from './services/redditService';
 import { analyzePostsForZen, AnalysisResult } from './services/aiService';
-import { firebaseService } from './services/firebaseService';
 import { Loader2, RefreshCw, Menu, CloudOff, TriangleAlert, Search, ChevronDown, LayoutGrid, List } from 'lucide-react';
 
 const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
@@ -156,9 +156,6 @@ const App: React.FC = () => {
     ...loadFromStorage('zen_ai_config', {})
   }));
   
-  // User Authentication State
-  const [user, setUser] = useState<UserProfile | null>(null);
-
   // UI State
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -170,76 +167,6 @@ const App: React.FC = () => {
   const isAtTopRef = useRef(false);
   const [pullY, setPullY] = useState(0);
   const [isPulling, setIsPulling] = useState(false);
-
-  // --- Initialize Firebase ---
-  useEffect(() => {
-      const fbConfigStr = localStorage.getItem('zen_firebase_config');
-      if (fbConfigStr) {
-          try {
-              const fbConfig = JSON.parse(fbConfigStr);
-              if (firebaseService.initialize(fbConfig)) {
-                  console.log("Firebase initialized");
-                  
-                  // Listen for auth state
-                  const unsubscribe = firebaseService.onAuthChange(async (firebaseUser) => {
-                      if (firebaseUser) {
-                          setUser({
-                              uid: firebaseUser.uid,
-                              displayName: firebaseUser.displayName,
-                              email: firebaseUser.email,
-                              photoURL: firebaseUser.photoURL
-                          });
-                          
-                          // Load remote data
-                          const remoteData = await firebaseService.getUserData(firebaseUser.uid);
-                          if (remoteData) {
-                              if (remoteData.followedSubs) setFollowedSubs(remoteData.followedSubs);
-                              if (remoteData.stats) {
-                                  setBlockedCount(Math.max(blockedCount, remoteData.stats.blockedCount || 0));
-                                  setBlockedCommentCount(Math.max(blockedCommentCount, remoteData.stats.blockedCommentCount || 0));
-                              }
-                              if (remoteData.preferences) {
-                                  setAiConfig(prev => ({
-                                      ...prev,
-                                      ...remoteData.preferences,
-                                      // Preserve keys that are excluded from sync
-                                      openRouterKey: prev.openRouterKey 
-                                  }));
-                              }
-                          } else {
-                              // New cloud user, sync local data up
-                              syncToCloud(firebaseUser.uid);
-                          }
-                      } else {
-                          setUser(null);
-                      }
-                  });
-                  return () => unsubscribe();
-              }
-          } catch (e) {
-              console.error("Invalid Firebase Config", e);
-          }
-      }
-  }, []);
-
-  // --- Cloud Sync Effect ---
-  const syncToCloud = useCallback(async (uid: string) => {
-      await firebaseService.saveUserData(uid, {
-          followedSubs,
-          blockedCount,
-          blockedCommentCount,
-          aiConfig
-      });
-  }, [followedSubs, blockedCount, blockedCommentCount, aiConfig]);
-
-  useEffect(() => {
-      if (user) {
-          const timeout = setTimeout(() => {
-              syncToCloud(user.uid);
-          }, 2000); // Debounce 2s
-          return () => clearTimeout(timeout);
-      }
-  }, [user, followedSubs, blockedCount, blockedCommentCount, aiConfig, syncToCloud]);
 
   // --- Effects for Persistence ---
   useEffect(() => {
@@ -313,27 +240,6 @@ const App: React.FC = () => {
   const handleFollow = (sub: string) => !followedSubs.includes(sub) && setFollowedSubs(prev => [...prev, sub]);
   const handleUnfollow = (sub: string) => setFollowedSubs(prev => prev.filter(s => s !== sub));
   const handleSaveSettings = (config: AIConfig) => setAiConfig(config);
-
-  const handleLogin = async () => {
-      if (!firebaseService.isInitialized()) {
-          setSettingsOpen(true);
-          alert("Please paste your Firebase Configuration in Settings to enable Cloud Sync.");
-          return;
-      }
-      try {
-          await firebaseService.login();
-      } catch (e) {
-          alert("Login failed. Check console or firebase config.");
-      }
-  };
-
-  const handleLogout = async () => {
-      try {
-          await firebaseService.logout();
-      } catch (e) {
-          console.error(e);
-      }
-  };
 
   const handlePostClick = (post: FilteredPost) => {
       try { window.history.pushState({ postOpen: true }, '', null); } catch (e) {}
@@ -588,9 +494,6 @@ const App: React.FC = () => {
                     blockedCount={blockedCount}
                     blockedCommentCount={blockedCommentCount}
                     onOpenSettings={() => { setSettingsOpen(true); setMobileMenuOpen(false); }}
-                    user={user}
-                    onLogin={handleLogin}
-                    onLogout={handleLogout}
                   />
               </div>
           </div>
@@ -610,9 +513,6 @@ const App: React.FC = () => {
             blockedCount={blockedCount}
             blockedCommentCount={blockedCommentCount}
             onOpenSettings={() => setSettingsOpen(true)}
-            user={user}
-            onLogin={handleLogin}
-            onLogout={handleLogout}
           />
       </div>
 
@@ -752,16 +652,23 @@ const App: React.FC = () => {
                     ) : (
                         <div className={viewMode === 'card' ? "columns-1 md:columns-2 xl:columns-3 gap-6" : "flex flex-col gap-3 max-w-4xl mx-auto pb-4"}>
                             {posts.map((post, index) => (
-                                <div key={post.id} className="animate-list-enter" style={{ animationDelay: `${index * 50}ms` }}>
-                                    <PostCard 
-                                        post={post} 
-                                        isSeen={!!seenPosts[post.id]}
-                                        onClick={handlePostClick}
-                                        onNavigateSub={handlePostNavigateSub}
-                                        onImageClick={handleGalleryClick}
-                                        viewMode={viewMode}
-                                    />
-                                </div>
+                                <LazyRender 
+                                    key={post.id} 
+                                    className="break-inside-avoid mb-6" 
+                                    minHeight={viewMode === 'compact' ? 100 : 300}
+                                    rootMargin="800px"
+                                >
+                                    <div className="animate-list-enter" style={{ animationDelay: `${Math.min(index % 10, 5) * 50}ms` }}>
+                                        <PostCard 
+                                            post={post} 
+                                            isSeen={!!seenPosts[post.id]}
+                                            onClick={handlePostClick}
+                                            onNavigateSub={handlePostNavigateSub}
+                                            onImageClick={handleGalleryClick}
+                                            viewMode={viewMode}
+                                        />
+                                    </div>
+                                </LazyRender>
                             ))}
                         </div>
                     )}

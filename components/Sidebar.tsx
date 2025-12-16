@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { Flame, Globe, Plus, Hash, X, Trash2, Moon, Sun, ShieldCheck, Settings, Search, LogIn, LogOut, User } from 'lucide-react';
-import { FeedType, UserProfile } from '../types';
+import { Flame, Globe, Plus, Hash, X, Trash2, Moon, Sun, ShieldCheck, Settings, Search } from 'lucide-react';
+import { FeedType } from '../types';
 import { searchSubreddits } from '../services/redditService';
 
 interface SidebarProps {
@@ -16,9 +16,6 @@ interface SidebarProps {
   blockedCount: number;
   blockedCommentCount: number;
   onOpenSettings: () => void;
-  user: UserProfile | null;
-  onLogin: () => void;
-  onLogout: () => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -32,10 +29,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   toggleTheme,
   blockedCount,
   blockedCommentCount,
-  onOpenSettings,
-  user,
-  onLogin,
-  onLogout
+  onOpenSettings
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<string[]>([]);
@@ -106,36 +100,6 @@ const Sidebar: React.FC<SidebarProps> = ({
       {/* Scrollable Nav Area */}
       <nav className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
         
-        {/* User Profile Section */}
-        {user ? (
-            <div className="bg-stone-50 dark:bg-stone-800/50 rounded-lg p-3 border border-stone-100 dark:border-stone-800/50 flex items-center justify-between nav-item-hover">
-                <div className="flex items-center gap-2 overflow-hidden">
-                    {user.photoURL ? (
-                        <img src={user.photoURL} alt="User" className="w-8 h-8 rounded-full border border-stone-200 dark:border-stone-700" />
-                    ) : (
-                        <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                            <User size={16} />
-                        </div>
-                    )}
-                    <div className="flex flex-col min-w-0">
-                        <span className="text-xs font-semibold text-stone-800 dark:text-stone-200 truncate">{user.displayName || "User"}</span>
-                        <span className="text-[10px] text-stone-500 dark:text-stone-400 truncate">Synced</span>
-                    </div>
-                </div>
-                <button onClick={onLogout} className="p-1.5 text-stone-400 hover:text-red-500 transition-colors btn-press" title="Logout">
-                    <LogOut size={16} />
-                </button>
-            </div>
-        ) : (
-            <button 
-                onClick={onLogin}
-                className="w-full flex items-center gap-3 p-3 rounded-lg border border-dashed border-stone-300 dark:border-stone-700 text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 hover:border-stone-400 dark:hover:border-stone-600 hover:bg-stone-50 dark:hover:bg-stone-800 transition-all group btn-press"
-            >
-                <LogIn size={18} className="text-stone-400 group-hover:text-emerald-500 transition-colors" />
-                <span className="text-sm font-medium">Connect Google</span>
-            </button>
-        )}
-
         {/* Search Results Display */}
         {searchResults.length > 0 && (
             <div className="animate-fade-in">

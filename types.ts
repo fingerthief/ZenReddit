@@ -1,6 +1,5 @@
 
 
-
 // Reddit API Types
 
 export interface RedditPostData {
@@ -80,6 +79,18 @@ export interface RedditCommentData {
   created_utc: number;
   replies?: RedditListing | ""; // Reddit API returns empty string for no replies sometimes
   permalink?: string;
+  media_metadata?: Record<string, {
+    status: string;
+    e: string;
+    m?: string;
+    s: {
+      y: number;
+      x: number;
+      u?: string;
+      gif?: string;
+      mp4?: string;
+    };
+  }>;
 }
 
 export interface RedditComment {
@@ -144,14 +155,7 @@ export interface CommentAnalysis {
   reason?: string;
 }
 
-// User & Cloud Sync Types
-export interface UserProfile {
-  uid: string;
-  displayName: string | null;
-  email: string | null;
-  photoURL: string | null;
-}
-
+// Firebase Configuration Types
 export interface FirebaseConfig {
   apiKey: string;
   authDomain: string;
@@ -159,4 +163,5 @@ export interface FirebaseConfig {
   storageBucket: string;
   messagingSenderId: string;
   appId: string;
+  measurementId?: string;
 }

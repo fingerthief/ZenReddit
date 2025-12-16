@@ -1,10 +1,7 @@
 
-
-
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, CircleAlert, Loader2, Shield, Key, Check, Search, Sparkles, Layers, Type, MessageSquare, Cloud, CheckCircle2 } from 'lucide-react';
-import { AIConfig, AIProvider, FirebaseConfig } from '../types';
-import { firebaseService } from '../services/firebaseService';
+import { X, Save, CircleAlert, Loader2, Shield, Key, Check, Search, Sparkles, Layers, Type, MessageSquare, Archive, Upload, Download } from 'lucide-react';
+import { AIConfig, AIProvider } from '../types';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -30,10 +27,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [localPageSize, setLocalPageSize] = useState(pageSize);
   const [localTextSize, setLocalTextSize] = useState(textSize);
   
-  // Cloud Sync State
-  const [firebaseConfigStr, setFirebaseConfigStr] = useState('');
-  const [isFirebaseConfigured, setIsFirebaseConfigured] = useState(false);
-
   // New state for models
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
@@ -41,6 +34,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   // Dropdown state
   const [showModelList, setShowModelList] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -51,16 +45,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       setAnalyzeComments(config.analyzeComments || false);
       setLocalPageSize(pageSize);
       setLocalTextSize(textSize);
-
-      // Load Firebase Config
-      const savedFb = localStorage.getItem('zen_firebase_config');
-      if (savedFb) {
-          setFirebaseConfigStr(savedFb);
-          try {
-              const parsed = JSON.parse(savedFb);
-              if (parsed.apiKey && parsed.projectId) setIsFirebaseConfigured(true);
-          } catch (e) {}
-      }
     }
   }, [isOpen, config, pageSize, textSize]);
 
@@ -119,25 +103,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     });
     onPageSizeChange(localPageSize);
     onTextSizeChange(localTextSize);
-    
-    // Save Firebase Config
-    if (firebaseConfigStr.trim()) {
-        try {
-            // Validate JSON
-            const parsed = JSON.parse(firebaseConfigStr);
-            if (parsed.apiKey) {
-                localStorage.setItem('zen_firebase_config', firebaseConfigStr);
-                // Attempt to init immediately
-                firebaseService.initialize(parsed);
-                window.location.reload(); // Reload to ensure auth state binds correctly
-            }
-        } catch (e) {
-            alert("Invalid JSON for Firebase Config");
-            return;
-        }
-    } else {
-        localStorage.removeItem('zen_firebase_config');
-    }
 
     onClose();
   };
@@ -146,6 +111,72 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       if (val < 30) return { text: "Relaxed", color: "text-blue-500" };
       if (val < 70) return { text: "Balanced", color: "text-emerald-500" };
       return { text: "Strict", color: "text-purple-500" };
+  };
+
+  // Export Logic
+  const handleExport = () => {
+    const data = {
+      timestamp: Date.now(),
+      zen_followed_subs: localStorage.getItem('zen_followed_subs'),
+      zen_ai_config: localStorage.getItem('zen_ai_config'),
+      zen_blocked_count: localStorage.getItem('zen_blocked_count'),
+      zen_blocked_comment_count: localStorage.getItem('zen_blocked_comment_count'),
+      zen_theme: localStorage.getItem('zen_theme'),
+      zen_sort: localStorage.getItem('zen_sort'),
+      zen_page_size: localStorage.getItem('zen_page_size'),
+      zen_text_size: localStorage.getItem('zen_text_size')
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `zen-reddit-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Import Logic
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string);
+        
+        // Basic validation check
+        if (!json.zen_followed_subs && !json.zen_ai_config) {
+            alert("Invalid backup file.");
+            return;
+        }
+
+        if (confirm("This will overwrite your current settings and subscriptions. Continue?")) {
+            if (json.zen_followed_subs) localStorage.setItem('zen_followed_subs', json.zen_followed_subs);
+            if (json.zen_ai_config) localStorage.setItem('zen_ai_config', json.zen_ai_config);
+            if (json.zen_blocked_count) localStorage.setItem('zen_blocked_count', json.zen_blocked_count);
+            if (json.zen_blocked_comment_count) localStorage.setItem('zen_blocked_comment_count', json.zen_blocked_comment_count);
+            if (json.zen_theme) localStorage.setItem('zen_theme', json.zen_theme);
+            if (json.zen_sort) localStorage.setItem('zen_sort', json.zen_sort);
+            if (json.zen_page_size) localStorage.setItem('zen_page_size', json.zen_page_size);
+            if (json.zen_text_size) localStorage.setItem('zen_text_size', json.zen_text_size);
+            
+            window.location.reload();
+        }
+      } catch (err) {
+        alert("Failed to parse backup file.");
+      }
+    };
+    reader.readAsText(file);
+    // Reset input
+    e.target.value = '';
   };
 
   // Filter models based on input
@@ -277,37 +308,41 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
             <div className="border-t border-stone-100 dark:border-stone-800"></div>
             
-            {/* Cloud Sync Section */}
+            {/* Data Management (Import/Export) */}
             <div>
-                 <div className="flex items-center justify-between mb-2">
-                    <label className="flex items-center gap-2 text-sm font-medium text-stone-700 dark:text-stone-300">
-                        <Cloud size={16} />
-                        Cloud Sync (Firebase)
-                    </label>
-                    {isFirebaseConfigured && (
-                        <div className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
-                            <CheckCircle2 size={10} />
-                            Configured
-                        </div>
-                    )}
-                 </div>
-                 
-                 <p className="text-xs text-stone-500 dark:text-stone-400 mb-3">
-                     To enable login and sync your followed subreddits across devices, create a <a href="https://console.firebase.google.com/" target="_blank" className="text-emerald-500 hover:underline">Firebase project</a>, enable Google Auth & Firestore, and paste the config object below.
-                 </p>
+                 <div className="flex items-center gap-2 mb-3">
+                     <Archive size={16} className="text-stone-400" />
+                     <h3 className="text-sm font-semibold text-stone-800 dark:text-stone-200">Data Management</h3>
+                </div>
+                
+                <p className="text-xs text-stone-500 dark:text-stone-400 mb-4">
+                    Backup your settings and subscriptions to transfer between devices.
+                </p>
 
-                 <textarea
-                    value={firebaseConfigStr}
-                    onChange={(e) => setFirebaseConfigStr(e.target.value)}
-                    placeholder='{"apiKey": "...", "authDomain": "...", "projectId": "..."}'
-                    className="w-full h-24 bg-stone-50 dark:bg-stone-950/50 border border-stone-200 dark:border-stone-700 rounded-lg px-3 py-2 text-xs font-mono text-stone-700 dark:text-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none transition-shadow"
-                    spellCheck={false}
-                 />
-                 {isFirebaseConfigured && (
-                    <div className="mt-2 text-[10px] text-stone-400 flex items-center gap-1">
-                        <span>Remember to add your domain to Authorized Domains in Firebase Console.</span>
-                    </div>
-                 )}
+                <div className="grid grid-cols-2 gap-3">
+                    <button 
+                        onClick={handleExport}
+                        className="flex flex-col items-center justify-center p-3 rounded-xl border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 hover:border-emerald-500 dark:hover:border-emerald-500 transition-all group"
+                    >
+                        <Download size={20} className="text-stone-400 group-hover:text-emerald-500 mb-2 transition-colors" />
+                        <span className="text-xs font-semibold text-stone-600 dark:text-stone-300">Export Backup</span>
+                    </button>
+                    
+                    <button 
+                        onClick={handleImportClick}
+                        className="flex flex-col items-center justify-center p-3 rounded-xl border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 hover:border-blue-500 dark:hover:border-blue-500 transition-all group"
+                    >
+                        <Upload size={20} className="text-stone-400 group-hover:text-blue-500 mb-2 transition-colors" />
+                        <span className="text-xs font-semibold text-stone-600 dark:text-stone-300">Import Data</span>
+                    </button>
+                    <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        className="hidden" 
+                        accept=".json"
+                        onChange={handleFileChange}
+                    />
+                </div>
             </div>
 
             <div className="border-t border-stone-100 dark:border-stone-800"></div>
