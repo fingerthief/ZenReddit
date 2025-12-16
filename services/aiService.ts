@@ -108,22 +108,59 @@ const fallbackResult = (posts: RedditPostData[]): AnalysisResult[] => {
 
 // --- Comment Analysis ---
 
-export const analyzeCommentsForZen = async (comments: RedditComment[], config?: AIConfig): Promise<CommentAnalysis[]> => {
+export const analyzeCommentsForZen = async (
+  comments: RedditComment[], 
+  config?: AIConfig,
+  context?: { title: string; subreddit: string; selftext?: string }
+): Promise<CommentAnalysis[]> => {
   const apiKey = config?.openRouterKey || process.env.API_KEY;
   if (!apiKey || comments.length === 0) return [];
 
-  // Limit payload: Top 10 comments only
-  const payload = comments.slice(0, 10).map(c => ({
-    id: c.data.id,
-    a: c.data.author,
-    b: c.data.body.substring(0, 150)
-  }));
+  // Limit payload: Top 10-15 comments
+  // Enhanced to include 'replies_context' to see how the conversation evolved
+  const payload = comments.slice(0, 15).map(c => {
+    let repliesContext: string[] = [];
+    
+    // Extract immediate reply snippets to provide conversation chain context
+    if (c.data.replies && typeof c.data.replies !== 'string' && c.data.replies.data) {
+        repliesContext = c.data.replies.data.children
+            .filter((child: any) => child.kind === 't1')
+            .slice(0, 3) // Check first 3 replies to gauge reaction
+            .map((child: any) => `[${child.data.author}]: ${child.data.body.substring(0, 60)}`);
+    }
+
+    return {
+      id: c.data.id,
+      author: c.data.author,
+      body: c.data.body.substring(0, 250),
+      replies_context: repliesContext
+    };
+  });
 
   const model = config?.openRouterModel || 'meta-llama/llama-3-8b-instruct:free';
 
+  const contextStr = context ? `
+    SUBREDDIT: r/${context.subreddit}
+    POST TITLE: "${context.title}"
+    ${context.selftext ? `POST CONTEXT: "${context.selftext.substring(0, 200)}..."` : ''}
+  ` : "Context: General Reddit Thread";
+
   const systemPrompt = `
-    Analyze comments. Flag hostile, toxic, rage-bait.
-    Return JSON: { "results": [{ "id": "string", "isToxic": boolean, "reason": "short string" }] }
+    You are a highly nuanced moderator for a Zen community.
+    Analyze the following Reddit comments for TOXICITY.
+
+    ${contextStr}
+
+    CRITICAL INSTRUCTIONS FOR CONTEXTUAL ANALYSIS:
+    1. **Conversation Chain**: Look at the "replies_context". 
+       - If replies are laughing ("lol", "lmao") or playing along, the comment is likely a JOKE/BANTER, even if it uses "edgy" language. DO NOT flag these.
+       - If replies are angry or hurt, the comment might be toxic.
+    2. **Dramatic vs Toxic**: 
+       - Phrases like "I'm dying", "I hate you (jokingly)", "This is insane", or slang are NOT toxic.
+       - Only flag content that is genuinely abusive, hateful, or intended to cause real harm/rage.
+    3. **Subreddit Context**: If this is a gaming/meme sub, expect trash talk. If it's a support sub, be stricter.
+
+    Return JSON: { "results": [{ "id": "string", "isToxic": boolean, "reason": "short string explanation" }] }
   `;
 
   try {
@@ -163,6 +200,7 @@ export const analyzeCommentsForZen = async (comments: RedditComment[], config?: 
       }
       return [];
   } catch (e) {
+      console.warn("Comment analysis error", e);
       return [];
   }
 };

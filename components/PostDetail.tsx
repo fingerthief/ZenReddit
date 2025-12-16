@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef, useMemo, memo, useContext, useCallb
 import { FilteredPost, RedditComment, RedditListing, CommentAnalysis, AIConfig } from '../types';
 import { fetchComments, fetchMoreChildren } from '../services/redditService';
 import { analyzeCommentsForZen } from '../services/aiService';
-import { X, ExternalLink, Loader2, ArrowBigUp, ChevronLeft, ChevronRight, ChevronDown, MessageSquare, Images, Plus, MoreHorizontal, ShieldAlert, Eye, Captions, CornerDownRight } from 'lucide-react';
+import { X, ExternalLink, Loader2, ArrowBigUp, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MessageSquare, Images, Plus, MoreHorizontal, ShieldAlert, Eye, Captions, CornerDownRight } from 'lucide-react';
 import Hls from 'hls.js';
 import { formatDistanceToNow } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
@@ -404,7 +404,7 @@ const CommentNode: React.FC<{
   const hasReplies = replies.length > 0;
 
   return (
-    <div className={`flex flex-col animate-list-enter ${depth === 0 ? 'mt-4 border-b border-stone-100 dark:border-stone-800 pb-4' : 'mt-4'}`}>
+    <div className={`flex flex-col ${depth === 0 ? 'mt-4 border-b border-stone-100 dark:border-stone-800 pb-4' : 'mt-4'}`}>
         {/* Header */}
         <div 
             onClick={toggleCollapse}
@@ -617,7 +617,11 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
       if (aiConfig.analyzeComments && data.length > 0 && aiConfig.openRouterKey) {
            setAnalyzingComments(true);
            try {
-               const analysisResults = await analyzeCommentsForZen(data, aiConfig);
+               const analysisResults = await analyzeCommentsForZen(data, aiConfig, {
+                   title: post.title,
+                   subreddit: post.subreddit,
+                   selftext: post.selftext
+               });
                const map: Record<string, CommentAnalysis> = {};
                analysisResults.forEach(r => map[r.id] = r);
                setCommentAnalysisMap(map);
@@ -701,7 +705,8 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
     const parents = container.querySelectorAll('[data-parent-comment="true"]');
     const containerRect = container.getBoundingClientRect();
     
-    for (const parent of parents) {
+    for (let i = 0; i < parents.length; i++) {
+        const parent = parents[i] as HTMLElement;
         const rect = parent.getBoundingClientRect();
         if (rect.top > containerRect.top + 60) {
             const relativeTop = rect.top - containerRect.top;
@@ -712,6 +717,28 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
             return;
         }
     }
+  };
+
+  const scrollToPrevParent = () => {
+      if (!scrollContainerRef.current) return;
+      const container = scrollContainerRef.current;
+      const parents = Array.from(container.querySelectorAll('[data-parent-comment="true"]'));
+      const containerRect = container.getBoundingClientRect();
+      const threshold = 5; 
+      
+      for (let i = parents.length - 1; i >= 0; i--) {
+          const parent = parents[i] as HTMLElement;
+          const rect = parent.getBoundingClientRect();
+          
+          if (rect.top < containerRect.top - threshold) {
+              const relativeTop = rect.top - containerRect.top;
+              container.scrollTo({
+                  top: container.scrollTop + relativeTop - 20,
+                  behavior: 'smooth'
+              });
+              return;
+          }
+      }
   };
 
   // Render logic for post media...
@@ -943,8 +970,8 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                         }
 
                         return (
-                            <LazyRender key={comment.data.id} minHeight={80} rootMargin="600px">
-                                <div data-parent-comment="true" style={{ animationDelay: `${Math.min(i % 10, 5) * 0.03}s` }} className="animate-list-enter">
+                            <div key={comment.data.id} data-parent-comment="true" className="animate-list-enter" style={{ animationDelay: `${Math.min(i % 10, 5) * 0.03}s` }}>
+                                <LazyRender minHeight={80} rootMargin="600px">
                                     <CommentNode 
                                         comment={comment} 
                                         onNavigateSub={onNavigateSub} 
@@ -953,8 +980,8 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                                         toxicityAnalysis={commentAnalysisMap[comment.data.id]}
                                         linkId={post.name}
                                     />
-                                </div>
-                            </LazyRender>
+                                </LazyRender>
+                            </div>
                         );
                     })}
                     {comments.length === 0 && (
@@ -969,13 +996,23 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
             </div>
 
             {comments.length > 5 && (
-                <button
-                    onClick={scrollToNextParent}
-                    className="md:hidden absolute bottom-6 right-6 z-50 bg-emerald-600 text-white p-3 rounded-full shadow-lg shadow-emerald-900/20 hover:bg-emerald-700 active:scale-95 transition-all opacity-90 hover:opacity-100 btn-press"
-                    aria-label="Next comment"
-                >
-                    <ChevronDown size={24} />
-                </button>
+                <>
+                    <button
+                        onClick={scrollToPrevParent}
+                        className="md:hidden absolute bottom-20 right-6 z-50 bg-stone-200 dark:bg-stone-800 text-stone-600 dark:text-stone-300 p-3 rounded-full shadow-lg shadow-black/10 hover:bg-stone-300 dark:hover:bg-stone-700 active:scale-95 transition-all opacity-90 hover:opacity-100 btn-press"
+                        aria-label="Previous comment"
+                    >
+                        <ChevronUp size={24} />
+                    </button>
+                    
+                    <button
+                        onClick={scrollToNextParent}
+                        className="md:hidden absolute bottom-6 right-6 z-50 bg-emerald-600 text-white p-3 rounded-full shadow-lg shadow-emerald-900/20 hover:bg-emerald-700 active:scale-95 transition-all opacity-90 hover:opacity-100 btn-press"
+                        aria-label="Next comment"
+                    >
+                        <ChevronDown size={24} />
+                    </button>
+                </>
             )}
         </div>
         </div>
