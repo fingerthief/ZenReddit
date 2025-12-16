@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { FilteredPost, GalleryItem, ViewMode } from '../types';
 import { MessageSquare, ArrowBigUp, Image as ImageIcon, CirclePlay, Layers, ExternalLink } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -13,13 +13,19 @@ interface PostCardProps {
   viewMode?: ViewMode;
 }
 
-const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNavigateSub, onImageClick, viewMode = 'card' }) => {
-  const decodeHtml = (html: string) => {
-    const txt = document.createElement("textarea");
-    txt.innerHTML = html;
-    return txt.value;
-  };
+// Fast entity decoder that doesn't touch the DOM
+const decodeHtmlEntities = (str: string): string => {
+  if (!str) return "";
+  return str.replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#039;/g, "'")
+            .replace(/&nbsp;/g, ' ');
+};
 
+const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNavigateSub, onImageClick, viewMode = 'card' }) => {
+  
   const handleMediaClick = (e: React.MouseEvent) => {
       e.stopPropagation();
 
@@ -66,7 +72,6 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
       }
       
       if (!onImageClick) {
-          // If no image handler, maybe it's just a click to the post detail
           onClick(post);
           return;
       }
@@ -112,7 +117,6 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
             type: 'image' 
           }], 0);
       } else {
-          // If not an image/video we can preview, clicking content opens post
           onClick(post);
       }
   };
@@ -124,13 +128,13 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
       } else if (post.preview?.images?.[0]?.source?.url) {
           src = post.preview.images[0].source.url.replace(/&amp;/g, '&');
       }
-      
       // Fallback for default thumbnails
       if (src === 'self' || src === 'default' || src === 'image' || !src) return null;
       return src;
   };
 
-  const getMediaContent = () => {
+  // Memoize the media content generation to prevent expensive checks on every scroll/render
+  const mediaContent = useMemo(() => {
     const isVideo = post.is_video || 
                     !!post.secure_media?.reddit_video || 
                     !!post.preview?.reddit_video_preview ||
@@ -139,7 +143,6 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
     
     const isGallery = post.gallery_data || (post.url.includes('imgur.com') && (post.url.includes('/a/') || post.url.includes('/gallery/')));
 
-    // Try to get a high res preview image
     let previewSrc = null;
     if (post.preview?.images?.[0]?.source?.url) {
         previewSrc = post.preview.images[0].source.url.replace(/&amp;/g, '&');
@@ -153,7 +156,6 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
     }
 
     if (previewSrc && (isVideo || isGallery || post.url.match(/\.(jpg|jpeg|png|gif|webp)$/i) || post.domain.includes('redd.it') || post.domain.includes('imgur'))) {
-         // Calculate aspect ratio style to prevent layout shift
          const source = post.preview?.images?.[0]?.source;
          const mediaStyle = (source?.width && source?.height) 
             ? { aspectRatio: `${source.width} / ${source.height}` } 
@@ -223,7 +225,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
     }
 
     return null;
-  };
+  }, [post]);
 
   // --- COMPACT VIEW ---
   if (viewMode === 'compact') {
@@ -252,7 +254,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
             <div className={`py-2 pr-2 pl-3 sm:p-3 flex flex-col justify-between flex-1 min-w-0`}>
                 <div className="flex items-start justify-between gap-2">
                     <h3 className={`text-sm sm:text-base font-medium leading-snug line-clamp-2 ${isSeen ? 'text-stone-500' : 'text-stone-800 dark:text-stone-200'}`}>
-                        {decodeHtml(post.title)}
+                        {decodeHtmlEntities(post.title)}
                     </h3>
                      {post.zenScore !== undefined && (
                         <div 
@@ -334,11 +336,11 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
           <h3 
             className={`text-base font-semibold leading-snug transition-colors ${isSeen ? 'text-stone-500 dark:text-stone-500' : 'text-stone-900 dark:text-stone-100 hover:text-emerald-700 dark:hover:text-emerald-400'}`}
           >
-            {decodeHtml(post.title)}
+            {decodeHtmlEntities(post.title)}
           </h3>
 
           {/* Content Preview */}
-          {getMediaContent()}
+          {mediaContent}
 
           {/* Footer */}
           <div className="mt-4 flex items-center gap-4 text-stone-500 dark:text-stone-400 text-sm">
@@ -373,4 +375,4 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
   );
 };
 
-export default PostCard;
+export default React.memo(PostCard);

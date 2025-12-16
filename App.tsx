@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import PostCard from './components/PostCard';
@@ -25,19 +24,16 @@ const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
 
 const SEEN_EXPIRY_MS = 72 * 60 * 60 * 1000;
 
-const PostSkeleton: React.FC<{ viewMode: ViewMode }> = ({ viewMode }) => {
+// Optimized skeleton component
+const PostSkeleton: React.FC<{ viewMode: ViewMode }> = React.memo(({ viewMode }) => {
     if (viewMode === 'compact') {
         return (
-            <div className="bg-white dark:bg-stone-900 rounded-lg shadow-sm border border-stone-200 dark:border-stone-800 mb-2 animate-pulse flex overflow-hidden w-full">
-                 <div className="w-[80px] h-[80px] sm:w-[110px] sm:h-auto bg-stone-200 dark:bg-stone-800 shrink-0"></div>
-                 <div className="flex-1 p-2 sm:p-3 flex flex-col justify-between min-w-0">
-                     <div className="space-y-2 w-full">
+            <div className="bg-white dark:bg-stone-900 rounded-lg shadow-sm border border-stone-200 dark:border-stone-800 mb-2 animate-pulse flex overflow-hidden w-full h-[100px]">
+                 <div className="w-[80px] sm:w-[110px] bg-stone-200 dark:bg-stone-800 shrink-0 h-full"></div>
+                 <div className="flex-1 p-3 flex flex-col justify-between">
+                     <div className="space-y-2">
                          <div className="h-4 bg-stone-200 dark:bg-stone-800 rounded w-full"></div>
                          <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-2/3"></div>
-                     </div>
-                     <div className="flex justify-between items-end mt-2">
-                         <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-16"></div>
-                         <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-12"></div>
                      </div>
                  </div>
             </div>
@@ -45,32 +41,22 @@ const PostSkeleton: React.FC<{ viewMode: ViewMode }> = ({ viewMode }) => {
     }
     
     return (
-      <div className="bg-white dark:bg-stone-900 p-4 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 mb-4 animate-pulse break-inside-avoid w-full">
+      <div className="bg-white dark:bg-stone-900 p-4 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 mb-6 animate-pulse break-inside-avoid w-full h-[400px]">
         <div className="flex items-center gap-2 mb-3">
             <div className="w-6 h-6 bg-stone-200 dark:bg-stone-800 rounded-full"></div>
             <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-24"></div>
         </div>
         <div className="space-y-2 mb-4">
-                <div className="h-4 bg-stone-200 dark:bg-stone-800 rounded w-3/4"></div>
-                <div className="h-4 bg-stone-200 dark:bg-stone-800 rounded w-1/2"></div>
+            <div className="h-4 bg-stone-200 dark:bg-stone-800 rounded w-3/4"></div>
         </div>
         <div className="h-48 bg-stone-200 dark:bg-stone-800 rounded-lg mb-3"></div>
-        <div className="flex gap-4">
-            <div className="h-6 bg-stone-200 dark:bg-stone-800 rounded w-16"></div>
-            <div className="h-6 bg-stone-200 dark:bg-stone-800 rounded w-16"></div>
-        </div>
       </div>
     );
-};
+});
 
 const App: React.FC = () => {
   // Navigation State
-  const [currentFeed, setCurrentFeed] = useState<FeedType>(() => {
-    const saved = loadFromStorage('zen_last_feed', 'popular');
-    // @ts-ignore
-    if (saved === 'home') return 'popular';
-    return saved;
-  });
+  const [currentFeed, setCurrentFeed] = useState<FeedType>(() => loadFromStorage('zen_last_feed', 'popular'));
   const [currentSub, setCurrentSub] = useState<string | undefined>(() => loadFromStorage('zen_last_sub', undefined));
   const [currentSearchQuery, setCurrentSearchQuery] = useState<string>(() => loadFromStorage('zen_last_search', ''));
   const [navHistory, setNavHistory] = useState<{feed: FeedType, sub?: string, query?: string}[]>([]);
@@ -107,10 +93,7 @@ const App: React.FC = () => {
   const [analysisCache, setAnalysisCache] = useState<Record<string, CachedAnalysis>>(() => loadFromStorage<Record<string, CachedAnalysis>>('zen_analysis_cache', {}));
   
   // User Preferences State
-  const [followedSubs, setFollowedSubs] = useState<string[]>(() => {
-    return loadFromStorage<string[]>('zen_followed_subs', []);
-  });
-
+  const [followedSubs, setFollowedSubs] = useState<string[]>(() => loadFromStorage<string[]>('zen_followed_subs', []));
   const [blockedCount, setBlockedCount] = useState(() => loadFromStorage<number>('zen_blocked_count', 0));
   const [blockedCommentCount, setBlockedCommentCount] = useState(() => loadFromStorage<number>('zen_blocked_comment_count', 0));
   
@@ -119,26 +102,17 @@ const App: React.FC = () => {
     try {
       const saved = localStorage.getItem('zen_seen_posts');
       if (!saved) return {};
-      
       const parsed = JSON.parse(saved);
+      // Clean up old seen posts on boot
       const now = Date.now();
       const cleaned: Record<string, number> = {};
-      let hasChanges = false;
-      
       Object.entries(parsed).forEach(([id, timestamp]) => {
          if (typeof timestamp === 'number' && (now - timestamp) < SEEN_EXPIRY_MS) {
              cleaned[id] = timestamp;
-         } else {
-             hasChanges = true;
          }
       });
-      
-      if (hasChanges) {
-          localStorage.setItem('zen_seen_posts', JSON.stringify(cleaned));
-      }
       return cleaned;
     } catch (e) {
-      console.warn("Failed to parse seen posts", e);
       return {};
     }
   });
@@ -159,8 +133,11 @@ const App: React.FC = () => {
   // UI State
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  
+  // Refs
   const observerTarget = useRef<HTMLDivElement>(null);
   const mainScrollRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   
   // Touch / Gestures state
   const touchStartRef = useRef<{x: number, y: number} | null>(null);
@@ -170,51 +147,58 @@ const App: React.FC = () => {
 
   // --- Effects for Persistence ---
   useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
     localStorage.setItem('zen_theme', theme);
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
   }, [theme]);
 
+  // Batch save effect for simple configs
   useEffect(() => {
     localStorage.setItem('zen_last_feed', JSON.stringify(currentFeed));
     if (currentSub) localStorage.setItem('zen_last_sub', JSON.stringify(currentSub));
     else localStorage.removeItem('zen_last_sub');
     if (currentSearchQuery) localStorage.setItem('zen_last_search', JSON.stringify(currentSearchQuery));
-  }, [currentFeed, currentSub, currentSearchQuery]);
+    localStorage.setItem('zen_sort', JSON.stringify(currentSort));
+    localStorage.setItem('zen_top_time', JSON.stringify(currentTopTime));
+    localStorage.setItem('zen_page_size', JSON.stringify(pageSize));
+    localStorage.setItem('zen_text_size', JSON.stringify(textSize));
+    localStorage.setItem('zen_view_mode', viewMode);
+    localStorage.setItem('zen_followed_subs', JSON.stringify(followedSubs));
+    localStorage.setItem('zen_ai_config', JSON.stringify(aiConfig));
+    localStorage.setItem('zen_blocked_count', blockedCount.toString());
+    localStorage.setItem('zen_blocked_comment_count', blockedCommentCount.toString());
+  }, [currentFeed, currentSub, currentSearchQuery, currentSort, currentTopTime, pageSize, textSize, viewMode, followedSubs, aiConfig, blockedCount, blockedCommentCount]);
 
-  useEffect(() => localStorage.setItem('zen_sort', JSON.stringify(currentSort)), [currentSort]);
-  useEffect(() => localStorage.setItem('zen_top_time', JSON.stringify(currentTopTime)), [currentTopTime]);
-  useEffect(() => localStorage.setItem('zen_page_size', JSON.stringify(pageSize)), [pageSize]);
-  useEffect(() => localStorage.setItem('zen_text_size', JSON.stringify(textSize)), [textSize]);
-  useEffect(() => localStorage.setItem('zen_view_mode', viewMode), [viewMode]);
-  useEffect(() => localStorage.setItem('zen_followed_subs', JSON.stringify(followedSubs)), [followedSubs]);
-  useEffect(() => localStorage.setItem('zen_blocked_count', blockedCount.toString()), [blockedCount]);
-  useEffect(() => localStorage.setItem('zen_blocked_comment_count', blockedCommentCount.toString()), [blockedCommentCount]);
+  // Debounced save for expensive objects (seenPosts, analysisCache)
   useEffect(() => {
-    try {
-      localStorage.setItem('zen_seen_posts', JSON.stringify(seenPosts));
-    } catch (e) {}
+    const timer = setTimeout(() => {
+        try {
+            localStorage.setItem('zen_seen_posts', JSON.stringify(seenPosts));
+        } catch(e) {}
+    }, 1000);
+    return () => clearTimeout(timer);
   }, [seenPosts]);
-  useEffect(() => localStorage.setItem('zen_ai_config', JSON.stringify(aiConfig)), [aiConfig]);
 
   useEffect(() => {
-    try {
-        const now = Date.now();
-        const expiry = 7 * 24 * 60 * 60 * 1000;
-        const cleaned: Record<string, CachedAnalysis> = {};
-        Object.entries(analysisCache).forEach(([key, val]) => {
-            const cachedVal = val as CachedAnalysis;
-            if (now - cachedVal.timestamp < expiry) {
-                cleaned[key] = cachedVal;
+    const timer = setTimeout(() => {
+        try {
+            const now = Date.now();
+            const expiry = 7 * 24 * 60 * 60 * 1000;
+            const cleaned: Record<string, CachedAnalysis> = {};
+            // Basic pruning of cache
+            const entries = Object.entries(analysisCache) as [string, CachedAnalysis][];
+            // Limit cache size to 500 items to prevent storage overflow
+            const startIndex = Math.max(0, entries.length - 500);
+            
+            for (let i = startIndex; i < entries.length; i++) {
+                const [key, val] = entries[i];
+                if (now - val.timestamp < expiry) {
+                    cleaned[key] = val;
+                }
             }
-        });
-        localStorage.setItem('zen_analysis_cache', JSON.stringify(cleaned));
-    } catch (e) {
-        console.warn("Failed to save analysis cache", e);
-    }
+            localStorage.setItem('zen_analysis_cache', JSON.stringify(cleaned));
+        } catch (e) {}
+    }, 2000);
+    return () => clearTimeout(timer);
   }, [analysisCache]);
 
   useEffect(() => {
@@ -226,7 +210,7 @@ const App: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [selectedPost, viewingGallery]);
 
-  // Sync search input with currentSearchQuery when it changes externally
+  // Sync search input with currentSearchQuery
   useEffect(() => {
     if (currentFeed === 'search') {
       setSearchInput(currentSearchQuery);
@@ -241,16 +225,16 @@ const App: React.FC = () => {
   const handleUnfollow = (sub: string) => setFollowedSubs(prev => prev.filter(s => s !== sub));
   const handleSaveSettings = (config: AIConfig) => setAiConfig(config);
 
-  const handlePostClick = (post: FilteredPost) => {
+  const handlePostClick = useCallback((post: FilteredPost) => {
       try { window.history.pushState({ postOpen: true }, '', null); } catch (e) {}
       setSelectedPost(post);
       setSeenPosts(prev => ({ ...prev, [post.id]: Date.now() }));
-  };
+  }, []);
 
-  const handleGalleryClick = (items: GalleryItem[], index: number) => {
+  const handleGalleryClick = useCallback((items: GalleryItem[], index: number) => {
       try { window.history.pushState({ imageOpen: true }, '', null); } catch (e) {}
       setViewingGallery({ items, index });
-  };
+  }, []);
 
   const handlePostClose = () => {
       if (window.history.state?.postOpen) try { window.history.back(); } catch(e) { setSelectedPost(null); }
@@ -271,6 +255,12 @@ const App: React.FC = () => {
         setMobileMenuOpen(false);
         return;
     }
+    
+    // Abort any ongoing fetches immediately
+    if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+    }
+
     setNavHistory(prev => [...prev, { feed: currentFeed, sub: currentSub, query: currentSearchQuery }]);
     setCurrentFeed(type);
     setCurrentSub(sub);
@@ -280,7 +270,7 @@ const App: React.FC = () => {
         setCurrentSearchQuery('');
     }
     setMobileMenuOpen(false);
-    if (selectedPost) handlePostClose();
+    if (selectedPost) setSelectedPost(null);
     setViewingGallery(null);
     
     // Scroll back to top on navigate
@@ -296,32 +286,23 @@ const App: React.FC = () => {
 
   const handleTouchStart = (e: React.TouchEvent) => {
       if (viewingGallery || selectedPost || settingsOpen) return;
-      
       touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       if (mainScrollRef.current) {
           isAtTopRef.current = mainScrollRef.current.scrollTop <= 1;
-      } else {
-          isAtTopRef.current = window.scrollY <= 1; 
       }
       setIsPulling(false); 
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!touchStartRef.current || viewingGallery || selectedPost || settingsOpen) return;
-
     const currentY = e.touches[0].clientY;
     const dy = currentY - touchStartRef.current.y;
     const dx = e.touches[0].clientX - touchStartRef.current.x;
 
     if (isAtTopRef.current && dy > 0 && Math.abs(dy) > Math.abs(dx)) {
-        const currentScroll = mainScrollRef.current ? mainScrollRef.current.scrollTop : window.scrollY;
-        
-        if (currentScroll <= 1) {
-             const resistance = 0.45;
-             const newPullY = Math.min(dy * resistance, 150);
-             setPullY(newPullY);
-             setIsPulling(true);
-        }
+         const newPullY = Math.min(dy * 0.45, 150);
+         setPullY(newPullY);
+         setIsPulling(true);
     }
   };
 
@@ -345,6 +326,7 @@ const App: React.FC = () => {
           setPullY(0); 
       }
 
+      // Swipe back navigation
       if (pullY < 10 && startX < 40 && !viewingGallery && !selectedPost && !settingsOpen) {
           const dx = endX - startX;
           const dy = Math.abs(endY - startY);
@@ -361,8 +343,15 @@ const App: React.FC = () => {
   const handlePostNavigateSub = (sub: string) => handleNavigate('subreddit', sub);
 
   const loadPosts = useCallback(async (isLoadMore = false) => {
-    if (loading || analyzing) return;
+    // If loading or analyzing, allow refresh (isLoadMore=false), but block duplicate loadMore
+    if ((loading || analyzing) && isLoadMore) return;
     
+    // Cancel previous request if starting a new feed load
+    if (!isLoadMore) {
+        if (abortControllerRef.current) abortControllerRef.current.abort();
+        abortControllerRef.current = new AbortController();
+    }
+
     if (!isLoadMore) {
         if (!isRefreshing) setPosts([]); 
         setLoading(true);
@@ -372,6 +361,11 @@ const App: React.FC = () => {
     }
 
     try {
+      // Small delay to allow UI to update if switching feeds rapidly
+      if (!isLoadMore) await new Promise(resolve => setTimeout(resolve, 50));
+      
+      if (abortControllerRef.current?.signal.aborted) return;
+
       const { posts: rawPostsData, after: newAfter } = await fetchFeed(
         currentFeed, 
         currentSub, 
@@ -382,6 +376,8 @@ const App: React.FC = () => {
         currentTopTime,
         pageSize
       );
+      
+      if (abortControllerRef.current?.signal.aborted) return;
 
       setAfter(newAfter);
       const rawPosts = rawPostsData.map(p => p.data);
@@ -407,7 +403,11 @@ const App: React.FC = () => {
 
       if (postsToAnalyze.length > 0) {
           try {
+             // Only analyze if we have an API key, otherwise fallback happens inside service
              newAnalysisResults = await analyzePostsForZen(postsToAnalyze, aiConfig);
+             
+             if (abortControllerRef.current?.signal.aborted) return;
+
              newAnalysisResults.forEach(res => {
                  newCache[res.id] = { ...res, timestamp: Date.now() };
              });
@@ -433,17 +433,26 @@ const App: React.FC = () => {
       setPosts(prev => isLoadMore ? [...prev, ...filtered] : filtered);
 
     } catch (err: any) {
-        setError(err.message || "Failed to load feed");
+        if (err.name !== 'AbortError') {
+             setError(err.message || "Failed to load feed");
+        }
     } finally {
-        setLoading(false);
-        setAnalyzing(false);
+        if (!abortControllerRef.current?.signal.aborted) {
+            setLoading(false);
+            setAnalyzing(false);
+        }
     }
   }, [loading, analyzing, currentFeed, currentSub, after, followedSubs, currentSearchQuery, currentSort, currentTopTime, pageSize, analysisCache, aiConfig, isRefreshing]);
 
+  // Initial Load & Config Change Reload
   useEffect(() => {
       loadPosts(false);
+      return () => {
+          if (abortControllerRef.current) abortControllerRef.current.abort();
+      };
   }, [currentFeed, currentSub, currentSearchQuery, currentSort, currentTopTime, pageSize, aiConfig.provider, aiConfig.openRouterModel, aiConfig.customInstructions, followedSubs]); 
 
+  // Infinite Scroll Observer
   useEffect(() => {
       if (!observerTarget.current || loading || analyzing || !after) return;
       
@@ -453,13 +462,12 @@ const App: React.FC = () => {
           }
       }, { 
           threshold: 0.1,
-          root: mainScrollRef.current // Observe within scroll container
+          root: mainScrollRef.current
       });
       
       observer.observe(observerTarget.current);
       return () => observer.disconnect();
   }, [observerTarget, loading, analyzing, after, loadPosts]);
-
 
   return (
     <div 
@@ -629,12 +637,13 @@ const App: React.FC = () => {
             {/* Content Area */}
             {loading && posts.length === 0 ? (
                 <div className={viewMode === 'card' ? "columns-1 md:columns-2 xl:columns-3 gap-6" : "flex flex-col gap-3 max-w-4xl mx-auto"}>
+                    {/* Memoized skeletons array */}
                     {[1,2,3,4,5,6].map(i => <PostSkeleton key={i} viewMode={viewMode} />)}
                 </div>
             ) : error ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center animate-list-enter">
                     <CloudOff size={48} className="text-stone-300 mb-4" />
-                    <h3 className="text-xl font-medium text-stone-600 dark:text-stone-400 Connection Error">Connection Error</h3>
+                    <h3 className="text-xl font-medium text-stone-600 dark:text-stone-400">Connection Error</h3>
                     <p className="text-stone-500 dark:text-stone-500 mt-2 mb-6 max-w-sm">{error}</p>
                     <button onClick={() => loadPosts(false)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 btn-press">Try Again</button>
                 </div>

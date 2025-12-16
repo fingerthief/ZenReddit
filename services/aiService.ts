@@ -1,5 +1,4 @@
 
-
 import { RedditPostData, AIConfig, RedditComment, CommentAnalysis } from "../types";
 
 export interface AnalysisResult {
@@ -9,48 +8,42 @@ export interface AnalysisResult {
   reason: string;
 }
 
+const cleanJsonString = (str: string) => {
+    // Remove markdown code blocks if present (e.g. ```json ... ```)
+    return str.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
+};
+
 export const analyzePostsForZen = async (posts: RedditPostData[], config?: AIConfig): Promise<AnalysisResult[]> => {
   if (posts.length === 0) return [];
 
-  // Use config key first, fallback to env (if provided during build), otherwise null
   const apiKey = config?.openRouterKey || process.env.API_KEY;
+  if (!apiKey) return fallbackResult(posts);
 
-  if (!apiKey) {
-      return fallbackResult(posts);
-  }
-
-  // Prepare a concise payload to save tokens
+  // Minimized payload
   const postsPayload = posts.map(p => ({
     id: p.id,
-    title: p.title,
-    subreddit: p.subreddit,
-    body_snippet: p.selftext ? p.selftext.substring(0, 300) : "No text", 
+    t: p.title, // shortened key
+    s: p.subreddit,
+    b: p.selftext ? p.selftext.substring(0, 200) : "", // shortened body
   }));
 
   const threshold = config?.minZenScore ?? 50;
-  // Default to a free model on OpenRouter
   const model = config?.openRouterModel || 'meta-llama/llama-3-8b-instruct:free';
   
   const customPrompt = config?.customInstructions ? 
-    `USER CUSTOM PREFERENCES (IMPORTANT): "${config.customInstructions}". Adjust your scoring and reasoning based on these preferences.` : "";
+    `USER PREF: "${config.customInstructions}".` : "";
 
+  // Highly optimized prompt to save tokens
   const systemPrompt = `
-    Analyze the following Reddit posts to curate a "Zen" feed. 
-    Your goal is to strictly filter out rage bait, intentionally divisive politics, aggressive arguments, and content designed to induce anxiety or anger.
-    
+    Task: Filter Reddit posts for a "Zen" feed.
+    Filter out: Rage bait, divisive politics, aggression, anxiety-inducing content.
     ${customPrompt}
-
-    Context & Heuristics:
-    1. **Subreddit Reputation**: Hobby, nature, and support subs usually have high Zen scores. Controversial/political subs should be scrutinized.
-    2. **Content Tone**: Look for aggressive language or clickbait designed to provoke outrage.
-    
-    Output Requirements:
-    Return a JSON object with a single key "results" containing an array of objects.
-    Each object must have:
-    - "id": string (matching the input post id)
-    - "zenScore": number (0 to 100. 100 = Perfectly Zen/Calm/Constructive, 0 = Pure Rage Bait/Toxic).
-    - "isRageBait": boolean (true if zenScore is below ${threshold}).
-    - "reason": string (very short explanation, max 10 words).
+    Return JSON object with key "results" (array).
+    Each item:
+    - id: string
+    - zenScore: number (0=Toxic/Rage, 100=Calm/Constructive)
+    - reason: string (max 6 words)
+    - isRageBait: boolean (true if zenScore < ${threshold})
   `;
 
   try {
@@ -72,32 +65,25 @@ export const analyzePostsForZen = async (posts: RedditPostData[], config?: AICon
         })
       });
 
-      if (!response.ok) {
-          throw new Error(`OpenRouter API Error: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`API Error: ${response.status}`);
 
       const data = await response.json();
       const content = data.choices?.[0]?.message?.content;
       
-      if (!content) throw new Error("No content in AI response");
+      if (!content) throw new Error("No content");
 
       let parsed;
       try {
-          parsed = JSON.parse(content);
+          parsed = JSON.parse(cleanJsonString(content));
       } catch (e) {
-          console.warn("AI response was not valid JSON", content);
+          console.warn("Invalid JSON from AI", content);
           return fallbackResult(posts);
       }
 
-      // Handle both { results: [...] } and direct array [...]
       const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.data);
 
-      if (!Array.isArray(results)) {
-           console.warn("AI response did not contain an array", parsed);
-           return fallbackResult(posts);
-      }
+      if (!Array.isArray(results)) return fallbackResult(posts);
 
-      // Map back to ensure IDs exist
       return results.map((r: any) => ({
           id: r.id,
           isRageBait: typeof r.isRageBait === 'boolean' ? r.isRageBait : (r.zenScore < threshold),
@@ -106,7 +92,7 @@ export const analyzePostsForZen = async (posts: RedditPostData[], config?: AICon
       }));
 
   } catch (error) {
-      console.error("AI/OpenRouter Analysis Failed:", error);
+      console.error("AI Analysis Failed:", error);
       return fallbackResult(posts);
   }
 };
@@ -126,18 +112,17 @@ export const analyzeCommentsForZen = async (comments: RedditComment[], config?: 
   const apiKey = config?.openRouterKey || process.env.API_KEY;
   if (!apiKey || comments.length === 0) return [];
 
-  // Limit payload: Only top-level comments, max first 15 to save tokens/time
-  const payload = comments.slice(0, 15).map(c => ({
+  // Limit payload: Top 10 comments only
+  const payload = comments.slice(0, 10).map(c => ({
     id: c.data.id,
-    author: c.data.author,
-    body: c.data.body.substring(0, 200) // Truncate long comments
+    a: c.data.author,
+    b: c.data.body.substring(0, 150)
   }));
 
   const model = config?.openRouterModel || 'meta-llama/llama-3-8b-instruct:free';
 
   const systemPrompt = `
-    Analyze these Reddit comments. Identify comments that are hostile, toxic, ad-hominem attacks, or pure rage-bait.
-    Constructive disagreement is OK. 
+    Analyze comments. Flag hostile, toxic, rage-bait.
     Return JSON: { "results": [{ "id": "string", "isToxic": boolean, "reason": "short string" }] }
   `;
 
@@ -166,7 +151,7 @@ export const analyzeCommentsForZen = async (comments: RedditComment[], config?: 
       const content = data.choices?.[0]?.message?.content;
       if (!content) return [];
 
-      const parsed = JSON.parse(content);
+      const parsed = JSON.parse(cleanJsonString(content));
       const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.data);
       
       if (Array.isArray(results)) {
@@ -178,7 +163,6 @@ export const analyzeCommentsForZen = async (comments: RedditComment[], config?: 
       }
       return [];
   } catch (e) {
-      console.error("Comment analysis failed", e);
       return [];
   }
 };

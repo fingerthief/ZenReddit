@@ -1,7 +1,8 @@
 
-import { RedditListing, RedditPost, RedditComment, SortOption, TopTimeOption } from '../types';
+import { RedditPost, RedditComment, SortOption, TopTimeOption } from '../types';
 
 const BASE_URL = 'https://www.reddit.com';
+const TIMEOUT_MS = 10000;
 
 // Generate a random session ID to prevent Reddit from flagging all requests 
 // from this client as the exact same "bot" session.
@@ -13,7 +14,6 @@ const HEADERS = {
 };
 
 // List of proxies to try in order.
-// We rotate through them if one is blocked or down.
 const PROXY_PROVIDERS = [
   // CodeTabs is often more reliable for Reddit JSON than corsproxy (GET ONLY)
   (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
@@ -25,22 +25,15 @@ const PROXY_PROVIDERS = [
   (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
 ];
 
-/**
- * Shuffles the proxy list so we don't always hammer the same broken one first
- * if deployment causes a specific one to fail.
- */
 const getRotatedProxies = (method: string = 'GET') => {
   let proxies = [...PROXY_PROVIDERS];
-  
   // If POST, filter out proxies known to be GET-only or unreliable with POST
   if (method === 'POST') {
-      // corsproxy.io is the only reliable one for POST in this list
       return [
           (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`
       ];
   }
-
-  // Simple Fisher-Yates shuffle
+  // Simple Fisher-Yates shuffle to distribute load
   for (let i = proxies.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [proxies[i], proxies[j]] = [proxies[j], proxies[i]];
@@ -48,24 +41,34 @@ const getRotatedProxies = (method: string = 'GET') => {
   return proxies;
 };
 
+const fetchWithTimeout = async (url: string, options: RequestInit = {}) => {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    try {
+        const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+        });
+        clearTimeout(id);
+        return response;
+    } catch (err) {
+        clearTimeout(id);
+        throw err;
+    }
+}
+
 const fetchWithProxy = async (url: string, options?: RequestInit) => {
   let lastError: Error | null = null;
-  
   const method = options?.method || 'GET';
-  
-  // Get a shuffled list of proxies to try
   const proxiesToTry = getRotatedProxies(method);
 
   for (const provider of proxiesToTry) {
     try {
-      // Add cache buster to prevent sticky 502s from the proxy caching the error
       const separator = url.includes('?') ? '&' : '?';
       const urlWithCacheBuster = `${url}${separator}cb=${Date.now()}`;
-      
       const targetUrl = provider(urlWithCacheBuster);
       
-      // Attempt fetch with headers
-      const response = await fetch(targetUrl, {
+      const response = await fetchWithTimeout(targetUrl, {
         ...options,
         headers: {
             ...HEADERS,
@@ -73,12 +76,16 @@ const fetchWithProxy = async (url: string, options?: RequestInit) => {
         }
       });
 
-      // 429 is a Reddit-specific Rate Limit.
       if (response.status === 429) {
         console.warn('Reddit rate limit hit via proxy.');
+        continue; // Try next proxy
       }
 
       if (!response.ok) {
+        // 403/404 from Reddit usually means private sub or blocked content, proxy works but Reddit refused
+        if (response.status === 403 || response.status === 404) {
+            throw new Error(`Reddit Error: ${response.status}`);
+        }
         throw new Error(`Proxy error: ${response.status} ${response.statusText}`);
       }
 
@@ -86,23 +93,22 @@ const fetchWithProxy = async (url: string, options?: RequestInit) => {
       
       try {
         const json = JSON.parse(text);
-        
-        if (json.error) {
-            throw new Error(`Reddit API Error: ${json.message || json.error}`);
-        }
-        
+        if (json.error) throw new Error(`Reddit API Error: ${json.message || json.error}`);
         return json;
       } catch (e) {
-        throw new Error('Received invalid JSON data (likely HTML error page).');
+        throw new Error('Received invalid JSON data.');
       }
 
     } catch (error: any) {
-      console.warn(`Proxy failed: ${error.message}. Trying next provider...`);
+      // Don't retry if it's a specific Reddit logic error (like subreddit not found)
+      if (error.message.includes('Reddit Error')) throw error;
+      
+      console.warn(`Proxy failed: ${error.message}.`);
       lastError = error;
     }
   }
 
-  throw lastError || new Error('All proxies failed. Reddit might be blocking requests from this network.');
+  throw lastError || new Error('Connection failed. Please check your internet or try again later.');
 };
 
 export const fetchFeed = async (
@@ -141,7 +147,6 @@ export const fetchFeed = async (
     const data = await fetchWithProxy(url);
     
     if (!data || !data.data || !data.data.children) {
-        console.warn("Invalid Reddit Data Structure", data);
         return { posts: [], after: null };
     }
 
@@ -157,11 +162,10 @@ export const fetchFeed = async (
 
 export const fetchComments = async (permalink: string): Promise<RedditComment[]> => {
   const url = `${BASE_URL}${permalink.replace(/\/$/, '')}.json?raw_json=1`;
-  
   try {
     const data = await fetchWithProxy(url);
     if (Array.isArray(data) && data.length > 1) {
-      return data[1].data.children; // Returns everything including 'more' objects
+      return data[1].data.children; 
     }
     return [];
   } catch (error) {
@@ -172,7 +176,6 @@ export const fetchComments = async (permalink: string): Promise<RedditComment[]>
 
 export const fetchMoreChildren = async (linkId: string, children: string[]): Promise<any[]> => {
     const url = `${BASE_URL}/api/morechildren.json`;
-    
     const formData = new URLSearchParams();
     formData.append('link_id', linkId);
     formData.append('children', children.join(','));
@@ -182,9 +185,7 @@ export const fetchMoreChildren = async (linkId: string, children: string[]): Pro
         const data = await fetchWithProxy(url, {
             method: 'POST',
             body: formData,
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            }
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
         
         if (data && data.json && data.json.data && data.json.data.things) {
@@ -204,7 +205,6 @@ export const searchSubreddits = async (query: string): Promise<string[]> => {
     if (!data || !data.data || !data.data.children) return [];
     return data.data.children.map((child: any) => child.data.display_name);
   } catch (error) {
-    console.error("Search failed", error);
     return [];
   }
 };
