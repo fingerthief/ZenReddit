@@ -1,5 +1,6 @@
 
-import { RedditPost, RedditComment, SortOption, TopTimeOption } from '../types';
+
+import { RedditPost, RedditComment, RedditMore, SortOption, TopTimeOption } from '../types';
 
 const BASE_URL = 'https://www.reddit.com';
 const TIMEOUT_MS = 10000;
@@ -160,7 +161,7 @@ export const fetchFeed = async (
   }
 };
 
-export const fetchComments = async (permalink: string): Promise<RedditComment[]> => {
+export const fetchComments = async (permalink: string): Promise<(RedditComment | RedditMore)[]> => {
   const url = `${BASE_URL}${permalink.replace(/\/$/, '')}.json?raw_json=1`;
   try {
     const data = await fetchWithProxy(url);

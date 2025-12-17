@@ -697,6 +697,7 @@ const App: React.FC = () => {
       <QuickSubSwitcher 
         followedSubs={followedSubs}
         onNavigate={handleNavigate}
+        onFollow={handleFollow}
         currentFeed={currentFeed}
         currentSub={currentSub}
       />

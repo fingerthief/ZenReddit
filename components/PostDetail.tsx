@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo, memo, useContext, useCallback } from 'react';
-import { FilteredPost, RedditComment, RedditListing, CommentAnalysis, AIConfig } from '../types';
+import { FilteredPost, RedditComment, RedditListing, CommentAnalysis, AIConfig, RedditMore } from '../types';
 import { fetchComments, fetchMoreChildren } from '../services/redditService';
 import { analyzeCommentsForZen } from '../services/aiService';
 import { X, ExternalLink, Loader2, ArrowBigUp, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MessageSquare, Images, Plus, MoreHorizontal, ShieldAlert, Eye, Captions, CornerDownRight } from 'lucide-react';
@@ -565,7 +565,7 @@ const CommentNode: React.FC<{
 });
 
 const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, textSize, aiConfig, onCommentsBlocked }) => {
-  const [comments, setComments] = useState<RedditComment[]>([]);
+  const [comments, setComments] = useState<(RedditComment | RedditMore)[]>([]);
   const [loading, setLoading] = useState(true);
   const [analyzingComments, setAnalyzingComments] = useState(false);
   const [commentAnalysisMap, setCommentAnalysisMap] = useState<Record<string, CommentAnalysis>>({});
@@ -616,11 +616,13 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
       const data = await fetchComments(post.permalink);
       setComments(data);
       setLoading(false);
+      
+      const t1Comments = data.filter((c): c is RedditComment => c.kind === 't1');
 
-      if (aiConfig.analyzeComments && data.length > 0 && aiConfig.openRouterKey) {
+      if (aiConfig.analyzeComments && t1Comments.length > 0 && aiConfig.openRouterKey) {
            setAnalyzingComments(true);
            try {
-               const analysisResults = await analyzeCommentsForZen(data, aiConfig, {
+               const analysisResults = await analyzeCommentsForZen(t1Comments, aiConfig, {
                    title: post.title,
                    subreddit: post.subreddit,
                    selftext: post.selftext

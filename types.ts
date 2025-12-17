@@ -4,6 +4,7 @@
 
 export interface RedditPostData {
   id: string;
+  name: string;
   title: string;
   selftext: string;
   author: string;

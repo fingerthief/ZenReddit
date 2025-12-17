@@ -1,11 +1,12 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { Hash, X, Search, Globe, Flame, Layers } from 'lucide-react';
+import { Hash, X, Search, Globe, Flame, Layers, Plus, Loader2 } from 'lucide-react';
 import { FeedType } from '../types';
+import { searchSubreddits } from '../services/redditService';
 
 interface QuickSubSwitcherProps {
   followedSubs: string[];
   onNavigate: (type: FeedType, sub?: string) => void;
+  onFollow: (sub: string) => void;
   currentFeed: FeedType;
   currentSub?: string;
 }
@@ -13,11 +14,14 @@ interface QuickSubSwitcherProps {
 const QuickSubSwitcher: React.FC<QuickSubSwitcherProps> = ({
   followedSubs,
   onNavigate,
+  onFollow,
   currentFeed,
   currentSub
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [filter, setFilter] = useState('');
+  const [searchResults, setSearchResults] = useState<string[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -29,6 +33,8 @@ const QuickSubSwitcher: React.FC<QuickSubSwitcherProps> = ({
     } else {
       document.body.style.overflow = '';
       setFilter('');
+      setSearchResults([]);
+      setIsSearching(false);
     }
     return () => { document.body.style.overflow = ''; };
   }, [isOpen]);
@@ -36,6 +42,20 @@ const QuickSubSwitcher: React.FC<QuickSubSwitcherProps> = ({
   const handleSelect = (type: FeedType, sub?: string) => {
     onNavigate(type, sub);
     setIsOpen(false);
+  };
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!filter.trim()) return;
+    setIsSearching(true);
+    try {
+        const results = await searchSubreddits(filter);
+        setSearchResults(results);
+    } catch (e) {
+        console.error("Search failed", e);
+    } finally {
+        setIsSearching(false);
+    }
   };
 
   const filteredSubs = followedSubs.filter(sub => 
@@ -82,24 +102,59 @@ const QuickSubSwitcher: React.FC<QuickSubSwitcherProps> = ({
 
                 {/* Search Bar */}
                 <div className="px-4 pb-2 shrink-0">
-                    <div className="relative group">
+                    <form onSubmit={handleSearch} className="relative group">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 group-focus-within:text-emerald-500 transition-colors" size={18} />
                         <input 
                             ref={inputRef}
                             type="text" 
-                            placeholder="Find a subreddit..."
+                            placeholder="Find or search subreddits..."
                             value={filter}
                             onChange={(e) => setFilter(e.target.value)}
-                            className="w-full bg-stone-100 dark:bg-stone-800 border-2 border-transparent focus:border-emerald-500/50 rounded-xl py-3 pl-10 pr-4 text-base text-stone-800 dark:text-stone-200 placeholder-stone-400 outline-none transition-all"
+                            className="w-full bg-stone-100 dark:bg-stone-800 border-2 border-transparent focus:border-emerald-500/50 rounded-xl py-3 pl-10 pr-10 text-base text-stone-800 dark:text-stone-200 placeholder-stone-400 outline-none transition-all"
                         />
-                    </div>
+                        {isSearching && (
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                <Loader2 className="animate-spin text-emerald-500" size={18} />
+                            </div>
+                        )}
+                    </form>
                 </div>
 
                 {/* Scrollable List */}
                 <div className="overflow-y-auto p-4 space-y-4 overscroll-contain pb-8 min-h-[40vh]">
                     
+                    {/* Search Results (Remote) */}
+                    {searchResults.length > 0 && (
+                        <div className="space-y-2 mb-4">
+                             <div className="flex items-center justify-between px-2">
+                                 <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Search Results</p>
+                                 <button onClick={() => setSearchResults([])} className="text-xs text-stone-400">Clear</button>
+                             </div>
+                             <div className="grid grid-cols-1 gap-2">
+                                 {searchResults.map(sub => (
+                                     <button
+                                         key={sub}
+                                         onClick={() => {
+                                             onFollow(sub);
+                                             handleSelect('subreddit', sub);
+                                         }}
+                                         className="w-full flex items-center justify-between gap-3 p-3 rounded-xl bg-white dark:bg-stone-900 border border-emerald-100 dark:border-emerald-900/30 text-stone-700 dark:text-stone-300 shadow-sm transition-all active:scale-[0.98]"
+                                     >
+                                         <div className="flex items-center gap-3 overflow-hidden">
+                                            <div className="p-2 rounded-full shrink-0 bg-stone-100 dark:bg-stone-800 text-stone-500">
+                                                <Hash size={18} />
+                                            </div>
+                                            <span className="font-medium truncate text-base">r/{sub}</span>
+                                         </div>
+                                         <Plus size={18} className="text-emerald-500 shrink-0" />
+                                     </button>
+                                 ))}
+                             </div>
+                        </div>
+                    )}
+
                     {/* Standard Feeds (Only show if not filtering or if filter matches them) */}
-                    {(!filter || "popular".includes(filter.toLowerCase()) || "all".includes(filter.toLowerCase())) && (
+                    {(!filter || "popular".includes(filter.toLowerCase()) || "all".includes(filter.toLowerCase())) && searchResults.length === 0 && (
                         <div className="space-y-2">
                             <p className="text-xs font-bold text-stone-400 uppercase tracking-wider px-2">Feeds</p>
                             
@@ -147,9 +202,17 @@ const QuickSubSwitcher: React.FC<QuickSubSwitcherProps> = ({
                          {filteredSubs.length === 0 ? (
                              <div className="text-center py-10 bg-stone-50 dark:bg-stone-800/30 rounded-xl border border-dashed border-stone-200 dark:border-stone-700">
                                  <p className="text-stone-500 dark:text-stone-400 font-medium">
-                                     {filter ? 'No subreddits found' : 'No followed subreddits'}
+                                     {filter ? 'No followed subreddits match' : 'No followed subreddits'}
                                  </p>
                                  {!filter && <p className="text-xs text-stone-400 mt-1">Search via sidebar to add some!</p>}
+                                 {filter && searchResults.length === 0 && !isSearching && (
+                                     <button 
+                                        onClick={handleSearch}
+                                        className="mt-3 text-emerald-600 dark:text-emerald-500 text-sm font-medium hover:underline"
+                                     >
+                                         Search Reddit for "{filter}"
+                                     </button>
+                                 )}
                              </div>
                          ) : (
                              <div className="grid grid-cols-1 gap-2">

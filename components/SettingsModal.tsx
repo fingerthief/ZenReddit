@@ -14,6 +14,13 @@ interface SettingsModalProps {
   onTextSizeChange: (size: 'small' | 'medium' | 'large') => void;
 }
 
+const POPULAR_MODELS = [
+  { id: 'google/gemini-2.0-flash-lite-preview-02-05:free', name: 'Gemini 2.0 Flash Lite', isFree: true },
+  { id: 'meta-llama/llama-3-8b-instruct:free', name: 'Llama 3 8B', isFree: true },
+  { id: 'deepseek/deepseek-r1:free', name: 'DeepSeek R1', isFree: true },
+  { id: 'liquid/lfm-40b:free', name: 'Liquid LFM 40B', isFree: true },
+];
+
 const SettingsModal: React.FC<SettingsModalProps> = ({ 
     isOpen, onClose, config, onSave, pageSize, onPageSizeChange, textSize, onTextSizeChange 
 }) => {
@@ -391,70 +398,102 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               <p className="text-xs text-stone-400 mt-1">Stored locally in your browser.</p>
             </div>
 
-            <div ref={dropdownRef}>
-              <label className="block text-sm font-medium text-stone-700 dark:text-stone-300 mb-1">
-                Model ID
+            <div ref={dropdownRef} className="relative">
+              <label className="block text-sm font-medium text-stone-700 dark:text-stone-300 mb-2">
+                Model Selection
               </label>
-              <div className="relative">
-                  <div className="relative">
-                      <input
-                        type="text"
-                        value={openRouterModel}
-                        onChange={(e) => {
-                            setOpenRouterModel(e.target.value);
-                            setShowModelList(true);
-                        }}
-                        onFocus={() => setShowModelList(true)}
-                        placeholder="Search or enter model ID..."
-                        className="w-full bg-white dark:bg-stone-950 border border-stone-200 dark:border-stone-700 rounded-lg pl-3 pr-10 py-2 text-sm text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-shadow"
-                      />
-                      <div className="absolute right-2 top-2 text-stone-400">
-                          {loadingModels ? <Loader2 className="animate-spin" size={16} /> : <Search size={16} />}
-                      </div>
-                  </div>
 
-                  {/* Custom Dropdown */}
-                  {showModelList && (
-                      <div className="absolute z-20 w-full mt-1 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg shadow-xl max-h-60 overflow-y-auto animate-fade-in">
-                          {models.length === 0 && !loadingModels && (
-                              <div className="p-4 text-center text-sm text-stone-500">
-                                  {openRouterKey.length < 5 ? "Enter API Key to load models" : "No models found or loading..."}
-                              </div>
-                          )}
-                          
-                          {filteredModels.map(model => (
-                              <button
-                                  key={model.id}
-                                  onClick={() => {
-                                      setOpenRouterModel(model.id);
-                                      setShowModelList(false);
-                                  }}
-                                  className="w-full text-left px-4 py-3 text-sm hover:bg-stone-50 dark:hover:bg-stone-800 border-b border-stone-100 dark:border-stone-800 last:border-0 flex items-center justify-between group transition-colors"
-                              >
-                                  <div className="min-w-0 pr-2">
-                                      <div className="font-medium text-stone-800 dark:text-stone-200 truncate">{model.name}</div>
-                                      <div className="text-xs text-stone-500 truncate">{model.id}</div>
-                                  </div>
-                                  {openRouterModel === model.id && <Check size={16} className="text-emerald-500 shrink-0" />}
-                              </button>
-                          ))}
-                          
-                          {filteredModels.length === 0 && openRouterModel && models.length > 0 && (
-                              <button
-                                onClick={() => setShowModelList(false)}
-                                className="w-full text-left px-4 py-3 text-sm hover:bg-stone-50 dark:hover:bg-stone-800 text-stone-500 italic"
-                              >
-                                  Use custom ID: "{openRouterModel}"
-                              </button>
-                          )}
-                      </div>
-                  )}
+              {/* Quick Select Chips */}
+              <div className="flex flex-wrap gap-2 mb-3">
+                 {POPULAR_MODELS.map(m => (
+                    <button
+                        key={m.id}
+                        onClick={() => setOpenRouterModel(m.id)}
+                        className={`text-xs px-2.5 py-1.5 rounded-full border transition-all ${
+                            openRouterModel === m.id 
+                            ? 'bg-emerald-100 border-emerald-200 text-emerald-700 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400 font-medium shadow-sm'
+                            : 'bg-stone-50 border-stone-200 text-stone-600 dark:bg-stone-800 dark:border-stone-700 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-700'
+                        }`}
+                    >
+                        {m.name}
+                    </button>
+                 ))}
               </div>
+
+              <div className="relative group">
+                  <input
+                    type="text"
+                    value={openRouterModel}
+                    onChange={(e) => {
+                        setOpenRouterModel(e.target.value);
+                        setShowModelList(true);
+                    }}
+                    onFocus={() => setShowModelList(true)}
+                    placeholder="Search model ID (e.g. anthropic/claude-3)..."
+                    className="w-full bg-white dark:bg-stone-950 border border-stone-200 dark:border-stone-700 rounded-xl pl-10 pr-10 py-3 text-sm text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all shadow-sm"
+                  />
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none">
+                      <Search size={16} />
+                  </div>
+                  
+                  {/* Right Actions: Loading or Clear */}
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                       {loadingModels && <Loader2 className="animate-spin text-stone-400" size={16} />}
+                       {!loadingModels && openRouterModel && (
+                           <button 
+                             onClick={() => {
+                                 setOpenRouterModel('');
+                                 setShowModelList(true);
+                             }}
+                             className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 p-1 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800"
+                           >
+                               <X size={14} />
+                           </button>
+                       )}
+                  </div>
+              </div>
+
+              {/* Inline Dropdown for Mobile Friendliness */}
+              {showModelList && (
+                  <div className="mt-2 w-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl shadow-inner max-h-[300px] overflow-y-auto custom-scrollbar animate-fade-in">
+                      {models.length === 0 && !loadingModels && (
+                          <div className="p-4 text-center text-sm text-stone-500">
+                              {openRouterKey.length < 5 ? "Enter API Key to load models" : "No models found."}
+                          </div>
+                      )}
+                      
+                      {filteredModels.map(model => (
+                          <button
+                              key={model.id}
+                              onClick={() => {
+                                  setOpenRouterModel(model.id);
+                                  setShowModelList(false);
+                              }}
+                              className="w-full text-left px-4 py-3 text-sm hover:bg-stone-50 dark:hover:bg-stone-800 border-b border-stone-100 dark:border-stone-800 last:border-0 flex items-center justify-between group transition-colors"
+                          >
+                              <div className="min-w-0 pr-2">
+                                  <div className="font-medium text-stone-800 dark:text-stone-200 truncate">{model.name}</div>
+                                  <div className="text-xs text-stone-500 truncate">{model.id}</div>
+                              </div>
+                              {openRouterModel === model.id && <Check size={16} className="text-emerald-500 shrink-0" />}
+                          </button>
+                      ))}
+                      
+                      {filteredModels.length === 0 && openRouterModel && models.length > 0 && (
+                          <button
+                            onClick={() => setShowModelList(false)}
+                            className="w-full text-left px-4 py-3 text-sm hover:bg-stone-50 dark:hover:bg-stone-800 text-stone-500 italic border-t border-stone-100 dark:border-stone-800"
+                          >
+                              Use custom ID: "{openRouterModel}"
+                          </button>
+                      )}
+                  </div>
+              )}
               
-              <div className="flex items-start gap-2 mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/10 rounded border border-yellow-100 dark:border-yellow-900/30">
-                  <CircleAlert size={14} className="text-yellow-600 shrink-0 mt-0.5" />
-                  <p className="text-[10px] text-yellow-700 dark:text-yellow-500">
-                      Tip: Models with "flash" or "haiku" in the name are usually faster and cheaper.
+              <div className="flex items-start gap-2 mt-3 p-2 bg-stone-50 dark:bg-stone-900/50 rounded-lg border border-stone-100 dark:border-stone-800">
+                  <CircleAlert size={14} className="text-stone-400 shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-stone-500 dark:text-stone-400 leading-relaxed">
+                      Models with "free", "flash", or "haiku" in the name are usually the fastest and cheapest options for filtering.
                   </p>
               </div>
             </div>
