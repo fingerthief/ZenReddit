@@ -1,5 +1,4 @@
 
-
 // Reddit API Types
 
 export interface RedditPostData {
@@ -44,6 +43,13 @@ export interface RedditPostData {
       caption?: string;
     }[];
   };
+  // Flair fields
+  link_flair_text?: string;
+  link_flair_background_color?: string;
+  link_flair_text_color?: 'dark' | 'light';
+  author_flair_text?: string;
+  author_flair_background_color?: string;
+  author_flair_text_color?: 'dark' | 'light';
 }
 
 export interface RedditPost {
@@ -92,6 +98,10 @@ export interface RedditCommentData {
       mp4?: string;
     };
   }>;
+  // Flair fields
+  author_flair_text?: string;
+  author_flair_background_color?: string;
+  author_flair_text_color?: 'dark' | 'light';
 }
 
 export interface RedditComment {

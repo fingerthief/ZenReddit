@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef, useMemo, memo, useContext, useCallback } from 'react';
 import { FilteredPost, RedditComment, RedditListing, CommentAnalysis, AIConfig, RedditMore } from '../types';
 import { fetchComments, fetchMoreChildren } from '../services/redditService';
@@ -37,6 +38,47 @@ const getUserColor = (name: string) => {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
   return colors[Math.abs(hash) % colors.length];
+};
+
+// Fast entity decoder that doesn't touch the DOM
+const decodeHtmlEntities = (str: string): string => {
+  if (!str) return "";
+  return str.replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#039;/g, "'")
+            .replace(/&nbsp;/g, ' ');
+};
+
+const FlairBadge: React.FC<{ text: string; bgColor?: string; textColor?: 'dark' | 'light'; className?: string }> = ({ text, bgColor, textColor, className = '' }) => {
+  if (!text) return null;
+  
+  const hasBg = bgColor && bgColor !== 'transparent' && bgColor !== '';
+  
+  // When Reddit provides a color, it often assumes their own platform's contrast.
+  // We force high contrast here. 'light' means text should be white on dark bg.
+  // 'dark' means text should be dark on light bg.
+  const isLightText = textColor === 'light';
+  
+  const style: React.CSSProperties = {
+    backgroundColor: hasBg ? bgColor : undefined,
+  };
+
+  return (
+    <span 
+      style={style}
+      className={`
+        inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-tight 
+        ${!hasBg ? 'bg-stone-200 dark:bg-stone-800 text-stone-600 dark:text-stone-400' : ''} 
+        ${hasBg && isLightText ? 'text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2),0_1px_2px_rgba(0,0,0,0.1)]' : ''} 
+        ${hasBg && !isLightText ? 'text-stone-900 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.1)]' : ''} 
+        ${className} whitespace-nowrap leading-none border border-black/5 dark:border-white/5
+      `}
+    >
+      {decodeHtmlEntities(text)}
+    </span>
+  );
 };
 
 // Helper to extract image/video URLs from text
@@ -413,12 +455,21 @@ const CommentNode: React.FC<{
                 {collapsed ? <Plus size={14} className="text-white" /> : data.author.substring(0, 1).toUpperCase()}
             </div>
 
-            <div className="flex items-center gap-1.5 text-xs text-stone-500 dark:text-stone-400 overflow-hidden">
+            <div className="flex items-center gap-1.5 text-xs text-stone-500 dark:text-stone-400 overflow-hidden flex-wrap">
                  <span className={`font-bold truncate ${isOp ? 'text-blue-600 dark:text-blue-400' : 'text-stone-700 dark:text-stone-300'} ${collapsed ? 'text-stone-500' : ''}`}>
                     {data.author}
                  </span>
                  {isOp && <span className="text-[9px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-1 rounded border border-blue-100 dark:border-blue-900/50">OP</span>}
                  
+                 {data.author_flair_text && !collapsed && (
+                   <FlairBadge 
+                    text={data.author_flair_text} 
+                    bgColor={data.author_flair_background_color}
+                    textColor={data.author_flair_text_color}
+                    className="opacity-70 scale-90 origin-left"
+                   />
+                 )}
+
                  {!collapsed && (
                      <>
                         <span className="text-stone-300 dark:text-stone-600">•</span>
@@ -872,11 +923,19 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                         >
                             {post.subreddit}
                         </button>
-                        <span className="text-xs text-stone-500 dark:text-stone-400 truncate flex items-center gap-1">
+                        <div className="text-xs text-stone-500 dark:text-stone-400 truncate flex items-center gap-1.5 flex-wrap">
                             <span>Posted by u/{post.author}</span>
+                            {post.author_flair_text && (
+                                <FlairBadge 
+                                    text={post.author_flair_text} 
+                                    bgColor={post.author_flair_background_color}
+                                    textColor={post.author_flair_text_color}
+                                    className="scale-90 origin-left"
+                                />
+                            )}
                             <span>•</span>
                             <span>{formatDistanceToNow(new Date(post.created_utc * 1000))} ago</span>
-                        </span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -892,7 +951,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                 className="flex-1 overflow-y-auto bg-white dark:bg-stone-950 relative"
             >
             <div className="p-4 md:p-8 md:pb-20 max-w-5xl mx-auto">
-                <div className="flex gap-2 mb-4 animate-list-enter">
+                <div className="flex flex-wrap gap-2 mb-4 animate-list-enter items-center">
                     {post.zenScore !== undefined && (
                         <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border uppercase tracking-wider ${
                             post.zenScore >= 80 ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900/50' :
@@ -901,6 +960,14 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                         }`}>
                             Zen Score: {post.zenScore}
                         </span>
+                    )}
+                    {post.link_flair_text && (
+                        <FlairBadge 
+                            text={post.link_flair_text} 
+                            bgColor={post.link_flair_background_color}
+                            textColor={post.link_flair_text_color}
+                            className="text-[10px] px-2.5 py-1"
+                        />
                     )}
                 </div>
 

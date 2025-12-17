@@ -1,6 +1,7 @@
+
 import React, { useMemo, useState } from 'react';
 import { FilteredPost, GalleryItem, ViewMode } from '../types';
-import { MessageSquare, ArrowBigUp, Image as ImageIcon, CirclePlay, Layers, ExternalLink, Maximize2, Minimize2, Share2, Check } from 'lucide-react';
+import { MessageSquare, ArrowBigUp, Image as ImageIcon, CirclePlay, Layers, ExternalLink, Maximize2, Minimize2, Share2, Check, Tag } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface PostCardProps {
@@ -21,6 +22,36 @@ const decodeHtmlEntities = (str: string): string => {
             .replace(/&quot;/g, '"')
             .replace(/&#039;/g, "'")
             .replace(/&nbsp;/g, ' ');
+};
+
+const FlairBadge: React.FC<{ text: string; bgColor?: string; textColor?: 'dark' | 'light'; className?: string }> = ({ text, bgColor, textColor, className = '' }) => {
+  if (!text) return null;
+  
+  const hasBg = bgColor && bgColor !== 'transparent' && bgColor !== '';
+  
+  // When Reddit provides a color, it often assumes their own platform's contrast.
+  // We force high contrast here. 'light' means text should be white on dark bg.
+  // 'dark' means text should be dark on light bg.
+  const isLightText = textColor === 'light';
+  
+  const style: React.CSSProperties = {
+    backgroundColor: hasBg ? bgColor : undefined,
+  };
+
+  return (
+    <span 
+      style={style}
+      className={`
+        inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-tight 
+        ${!hasBg ? 'bg-stone-200 dark:bg-stone-800 text-stone-600 dark:text-stone-400' : ''} 
+        ${hasBg && isLightText ? 'text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2),0_1px_2px_rgba(0,0,0,0.1)]' : ''} 
+        ${hasBg && !isLightText ? 'text-stone-900 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.1)]' : ''} 
+        ${className} whitespace-nowrap leading-none border border-black/5 dark:border-white/5
+      `}
+    >
+      {decodeHtmlEntities(text)}
+    </span>
+  );
 };
 
 const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNavigateSub, onImageClick, viewMode = 'card' }) => {
@@ -102,7 +133,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
       }
 
       // --- Gallery Detection ---
-      if (post.gallery_data && post.media_metadata) {
+      if (post.is_gallery && post.gallery_data && post.media_metadata) {
           const items: GalleryItem[] = post.gallery_data.items.map((item): GalleryItem | null => {
               const media = post.media_metadata![item.media_id];
               let src = media?.s?.u || media?.s?.gif;
@@ -166,7 +197,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
                     (post.url && !!post.url.match(/\.(mp4|gifv|webm|mkv|mov)$/i)) ||
                     post.domain === 'v.redd.it';
     
-    const isGallery = post.gallery_data || (post.url.includes('imgur.com') && (post.url.includes('/a/') || post.url.includes('/gallery/')));
+    const isGallery = post.is_gallery || post.gallery_data || (post.url.includes('imgur.com') && (post.url.includes('/a/') || post.url.includes('/gallery/')));
 
     let previewSrc = null;
     if (post.preview?.images?.[0]?.source?.url) {
@@ -180,7 +211,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
         previewSrc = post.thumbnail;
     }
 
-    if (previewSrc && (isVideo || isGallery || post.url.match(/\.(jpg|jpeg|png|gif|webp)$/i) || post.domain.includes('redd.it') || post.domain.includes('imgur'))) {
+    if (previewSrc && (isVideo || isGallery || post.url.match(/\.(jpg|jpeg|png|gif|webp)$/i) || post.domain?.includes('redd.it') || post.domain?.includes('imgur'))) {
          const source = post.preview?.images?.[0]?.source;
          
          const hasDimensions = !!(source?.width && source?.height);
@@ -293,9 +324,20 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
             
             <div className={`py-2 pr-2 pl-3 sm:p-3 flex flex-col justify-between flex-1 min-w-0`}>
                 <div className="flex items-start justify-between gap-2">
-                    <h3 className={`text-sm sm:text-base font-medium leading-snug line-clamp-2 ${isSeen ? 'text-stone-500' : 'text-stone-800 dark:text-stone-200'}`}>
-                        {decodeHtmlEntities(post.title)}
-                    </h3>
+                    <div className="flex flex-col min-w-0">
+                      <h3 className={`text-sm sm:text-base font-medium leading-snug line-clamp-2 ${isSeen ? 'text-stone-500' : 'text-stone-800 dark:text-stone-200'}`}>
+                          {decodeHtmlEntities(post.title)}
+                      </h3>
+                      {post.link_flair_text && (
+                        <div className="mt-1">
+                          <FlairBadge 
+                            text={post.link_flair_text} 
+                            bgColor={post.link_flair_background_color}
+                            textColor={post.link_flair_text_color}
+                          />
+                        </div>
+                      )}
+                    </div>
                      {post.zenScore !== undefined && (
                         <div 
                             className={`shrink-0 w-2 h-2 rounded-full mt-1.5 shadow-sm ${
@@ -360,7 +402,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
       <div className="p-4 flex flex-col h-full">
           {/* Header */}
           <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center text-xs text-stone-500 dark:text-stone-400 gap-2 overflow-hidden">
+            <div className="flex items-center text-xs text-stone-500 dark:text-stone-400 gap-2 overflow-hidden flex-wrap">
                 <span 
                     className="font-bold text-stone-700 dark:text-stone-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:underline cursor-pointer transition-colors"
                     onClick={(e) => {
@@ -374,6 +416,14 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
                 </span>
                 <span className="text-stone-300 dark:text-stone-600">•</span>
                 <span>{formatDistanceToNow(new Date(post.created_utc * 1000))} ago</span>
+                {post.author_flair_text && (
+                  <FlairBadge 
+                    text={post.author_flair_text} 
+                    bgColor={post.author_flair_background_color}
+                    textColor={post.author_flair_text_color}
+                    className="opacity-80 scale-90 origin-left"
+                  />
+                )}
             </div>
 
             {/* Zen Badge */}
@@ -388,12 +438,23 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
             )}
           </div>
 
-          {/* Title */}
-          <h3 
-            className={`text-base font-semibold leading-snug transition-colors ${isSeen ? 'text-stone-500 dark:text-stone-500' : 'text-stone-900 dark:text-stone-100 hover:text-emerald-700 dark:hover:text-emerald-400'}`}
-          >
-            {decodeHtmlEntities(post.title)}
-          </h3>
+          {/* Title Area */}
+          <div className="mb-2">
+            <h3 
+              className={`text-base font-semibold leading-snug transition-colors ${isSeen ? 'text-stone-500 dark:text-stone-500' : 'text-stone-900 dark:text-stone-100 hover:text-emerald-700 dark:hover:text-emerald-400'}`}
+            >
+              {decodeHtmlEntities(post.title)}
+            </h3>
+            {post.link_flair_text && (
+              <div className="mt-2 flex gap-1">
+                <FlairBadge 
+                  text={post.link_flair_text} 
+                  bgColor={post.link_flair_background_color}
+                  textColor={post.link_flair_text_color}
+                />
+              </div>
+            )}
+          </div>
 
           {/* Content Preview */}
           {mediaContent}
@@ -424,7 +485,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
             
             <div className="flex-1"></div>
             
-            {post.domain !== `self.${post.subreddit}` && !post.domain.includes('reddit.com') && (
+            {post.domain !== `self.${post.subreddit}` && !post.domain?.includes('reddit.com') && (
                  <a 
                     href={post.url} 
                     target="_blank" 
