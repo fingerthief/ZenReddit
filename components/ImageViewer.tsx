@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Download, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Images, Captions } from 'lucide-react';
 import { GalleryItem } from '../types';
@@ -274,159 +273,166 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ items, initialIndex = 0, onCl
   const isVideo = currentItem.type === 'video';
 
   return (
-    <div 
-        className="fixed inset-0 z-[60] bg-black flex items-center justify-center overflow-hidden animate-fade-in"
-        ref={containerRef}
-    >
-        {/* Toolbar */}
-        <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-start z-10 bg-gradient-to-b from-black/60 to-transparent pointer-events-none transition-opacity duration-300">
-            <button 
-                onClick={onClose}
-                className="p-2 bg-black/40 text-white rounded-full backdrop-blur-md pointer-events-auto hover:bg-white/20 transition-colors"
-            >
-                <X size={24} />
-            </button>
-
-            <div className="flex items-center gap-3">
-                 {items.length > 1 && (
-                     <div className="bg-black/40 text-white px-3 py-1.5 rounded-full backdrop-blur-md text-sm font-medium flex items-center gap-2">
-                        <Images size={14} />
-                        <span>{currentIndex + 1} / {items.length}</span>
-                     </div>
-                 )}
-                 
-                 {/* CC Button */}
-                 {hasSubtitles && (
-                     <button 
-                        onClick={toggleSubtitles}
-                        className={`p-2 rounded-full backdrop-blur-md transition-colors pointer-events-auto ${subtitlesEnabled ? 'bg-emerald-600 text-white' : 'bg-black/40 text-white hover:bg-white/20'}`}
-                        title="Toggle Captions"
-                     >
-                        <Captions size={24} />
-                     </button>
-                 )}
-
-                 <button 
-                    onClick={handleDownload}
-                    className="p-2 bg-black/40 text-white rounded-full backdrop-blur-md hover:bg-white/20 transition-colors pointer-events-auto"
-                    title={isVideo ? "Open in New Tab" : "Download"}
-                >
-                    <Download size={24} />
-                </button>
-            </div>
-        </div>
-
-        {/* Media Track Container */}
+    <div className="fixed inset-0 z-[60] flex items-center justify-center animate-fade-in">
+        {/* Backdrop */}
+        <div className="absolute inset-0 bg-black/95 backdrop-blur-sm transition-opacity" onClick={onClose} />
+        
+        {/* Main Content Container */}
         <div 
-            className="w-full h-full touch-none relative"
-            onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
-            onTouchEnd={onTouchEnd}
-            onDoubleClick={handleDoubleTap}
+            ref={containerRef}
+            className="relative w-full h-full md:w-[95vw] md:h-[90vh] md:max-w-7xl md:rounded-xl md:overflow-hidden md:bg-black md:shadow-2xl md:border md:border-stone-800 flex flex-col bg-black transition-all duration-300"
+            onClick={(e) => e.stopPropagation()}
         >
-             {/* The Track */}
-             <div 
-                className="flex h-full w-full"
-                style={{ 
-                    transform: `translateX(calc(-${currentIndex * 100}% + ${dragOffset}px))`,
-                    transition: isAnimating ? 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' : 'none'
-                }}
-             >
-                {items.map((item, index) => {
-                    // Optimization: Only render content for current, prev, and next slides
-                    if (Math.abs(currentIndex - index) > 1) {
-                        return <div key={item.id || index} className="w-full h-full flex-shrink-0" />;
-                    }
+            {/* Toolbar */}
+            <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-start z-10 bg-gradient-to-b from-black/60 to-transparent pointer-events-none transition-opacity duration-300">
+                <button 
+                    onClick={onClose}
+                    className="p-2 bg-black/40 text-white rounded-full backdrop-blur-md pointer-events-auto hover:bg-white/20 transition-colors"
+                >
+                    <X size={24} />
+                </button>
 
-                    const isCurrent = index === currentIndex;
-                    const itemIsVideo = item.type === 'video';
-
-                    return (
-                        <div key={item.id || index} className="w-full h-full flex-shrink-0 flex items-center justify-center overflow-hidden">
-                             {itemIsVideo ? (
-                                <video
-                                    ref={(el) => { videoRefs.current[index] = el; }}
-                                    className="max-w-full max-h-full"
-                                    controls={isCurrent}
-                                    playsInline
-                                    poster={item.src}
-                                    onClick={(e) => e.stopPropagation()} 
-                                    style={{
-                                        // Only apply zoom transform to current slide
-                                        transform: isCurrent ? `translate(${position.x}px, ${position.y}px) scale(${scale})` : 'none',
-                                        transition: 'transform 0.1s ease-out'
-                                    }}
-                                >
-                                    <source src={item.videoSources?.mp4} type="video/mp4" />
-                                </video>
-                             ) : (
-                                <img 
-                                    src={item.src} 
-                                    alt={item.caption || "Full size"}
-                                    className="max-w-full max-h-full object-contain select-none"
-                                    style={{ 
-                                        transform: isCurrent ? `translate(${position.x}px, ${position.y}px) scale(${scale})` : 'none',
-                                        transition: isDragging && scale > 1 ? 'none' : 'transform 0.2s ease-out',
-                                        cursor: scale > 1 ? 'grab' : 'default'
-                                    }}
-                                    draggable={false}
-                                />
-                             )}
+                <div className="flex items-center gap-3">
+                    {items.length > 1 && (
+                        <div className="bg-black/40 text-white px-3 py-1.5 rounded-full backdrop-blur-md text-sm font-medium flex items-center gap-2">
+                            <Images size={14} />
+                            <span>{currentIndex + 1} / {items.length}</span>
                         </div>
-                    );
-                })}
-             </div>
-            
-            {/* Caption */}
-            {currentItem.caption && scale === 1 && (
-                <div className="absolute bottom-20 left-4 right-4 text-center pointer-events-none transition-opacity duration-300">
-                    <span className="inline-block bg-black/60 backdrop-blur-md text-white px-4 py-2 rounded-lg text-sm">
-                        {currentItem.caption}
-                    </span>
+                    )}
+                    
+                    {/* CC Button */}
+                    {hasSubtitles && (
+                        <button 
+                            onClick={toggleSubtitles}
+                            className={`p-2 rounded-full backdrop-blur-md transition-colors pointer-events-auto ${subtitlesEnabled ? 'bg-emerald-600 text-white' : 'bg-black/40 text-white hover:bg-white/20'}`}
+                            title="Toggle Captions"
+                        >
+                            <Captions size={24} />
+                        </button>
+                    )}
+
+                    <button 
+                        onClick={handleDownload}
+                        className="p-2 bg-black/40 text-white rounded-full backdrop-blur-md hover:bg-white/20 transition-colors pointer-events-auto"
+                        title={isVideo ? "Open in New Tab" : "Download"}
+                    >
+                        <Download size={24} />
+                    </button>
+                </div>
+            </div>
+
+            {/* Media Track Container */}
+            <div 
+                className="w-full h-full touch-none relative flex-1"
+                onTouchStart={onTouchStart}
+                onTouchMove={onTouchMove}
+                onTouchEnd={onTouchEnd}
+                onDoubleClick={handleDoubleTap}
+            >
+                {/* The Track */}
+                <div 
+                    className="flex h-full w-full"
+                    style={{ 
+                        transform: `translateX(calc(-${currentIndex * 100}% + ${dragOffset}px))`,
+                        transition: isAnimating ? 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' : 'none'
+                    }}
+                >
+                    {items.map((item, index) => {
+                        // Optimization: Only render content for current, prev, and next slides
+                        if (Math.abs(currentIndex - index) > 1) {
+                            return <div key={item.id || index} className="w-full h-full flex-shrink-0" />;
+                        }
+
+                        const isCurrent = index === currentIndex;
+                        const itemIsVideo = item.type === 'video';
+
+                        return (
+                            <div key={item.id || index} className="w-full h-full flex-shrink-0 flex items-center justify-center overflow-hidden">
+                                {itemIsVideo ? (
+                                    <video
+                                        ref={(el) => { videoRefs.current[index] = el; }}
+                                        className="max-w-full max-h-full"
+                                        controls={isCurrent}
+                                        playsInline
+                                        poster={item.src}
+                                        onClick={(e) => e.stopPropagation()} 
+                                        style={{
+                                            // Only apply zoom transform to current slide
+                                            transform: isCurrent ? `translate(${position.x}px, ${position.y}px) scale(${scale})` : 'none',
+                                            transition: 'transform 0.1s ease-out'
+                                        }}
+                                    >
+                                        <source src={item.videoSources?.mp4} type="video/mp4" />
+                                    </video>
+                                ) : (
+                                    <img 
+                                        src={item.src} 
+                                        alt={item.caption || "Full size"}
+                                        className="max-w-full max-h-full object-contain select-none"
+                                        style={{ 
+                                            transform: isCurrent ? `translate(${position.x}px, ${position.y}px) scale(${scale})` : 'none',
+                                            transition: isDragging && scale > 1 ? 'none' : 'transform 0.2s ease-out',
+                                            cursor: scale > 1 ? 'grab' : 'default'
+                                        }}
+                                        draggable={false}
+                                    />
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+                
+                {/* Caption */}
+                {currentItem.caption && scale === 1 && (
+                    <div className="absolute bottom-20 left-4 right-4 text-center pointer-events-none transition-opacity duration-300">
+                        <span className="inline-block bg-black/60 backdrop-blur-md text-white px-4 py-2 rounded-lg text-sm">
+                            {currentItem.caption}
+                        </span>
+                    </div>
+                )}
+            </div>
+
+            {/* Navigation Buttons (Desktop) */}
+            {currentIndex > 0 && (
+                <button 
+                    onClick={handlePrev}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-black/30 hover:bg-black/50 text-white rounded-full transition-all hidden md:block z-20 hover:scale-110 active:scale-95"
+                >
+                    <ChevronLeft size={32} />
+                </button>
+            )}
+            {currentIndex < items.length - 1 && (
+                <button 
+                    onClick={handleNext}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-black/30 hover:bg-black/50 text-white rounded-full transition-all hidden md:block z-20 hover:scale-110 active:scale-95"
+                >
+                    <ChevronRight size={32} />
+                </button>
+            )}
+
+            {/* Zoom Controls (Bottom) - Only for images */}
+            {!isVideo && (
+                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-4 pointer-events-auto z-10 opacity-0 md:opacity-100 transition-opacity">
+                    <div className="flex bg-stone-900/80 backdrop-blur-md rounded-full px-2 py-1 border border-stone-800 shadow-lg">
+                        <button 
+                            onClick={handleZoomOut}
+                            className="p-3 text-stone-300 hover:text-white disabled:opacity-50"
+                            disabled={scale <= 1}
+                        >
+                            <ZoomOut size={20} />
+                        </button>
+                        <div className="w-px bg-stone-700 my-2"></div>
+                        <button 
+                            onClick={handleZoomIn}
+                            className="p-3 text-stone-300 hover:text-white disabled:opacity-50"
+                            disabled={scale >= 4}
+                        >
+                            <ZoomIn size={20} />
+                        </button>
+                    </div>
                 </div>
             )}
         </div>
-
-        {/* Navigation Buttons (Desktop) */}
-        {currentIndex > 0 && (
-            <button 
-                onClick={handlePrev}
-                className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-black/30 hover:bg-black/50 text-white rounded-full transition-all hidden md:block z-20 hover:scale-110 active:scale-95"
-            >
-                <ChevronLeft size={32} />
-            </button>
-        )}
-        {currentIndex < items.length - 1 && (
-            <button 
-                onClick={handleNext}
-                className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-black/30 hover:bg-black/50 text-white rounded-full transition-all hidden md:block z-20 hover:scale-110 active:scale-95"
-            >
-                <ChevronRight size={32} />
-            </button>
-        )}
-
-        {/* Zoom Controls (Bottom) - Only for images */}
-        {!isVideo && (
-            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-4 pointer-events-auto z-10 opacity-0 md:opacity-100 transition-opacity">
-                <div className="flex bg-stone-900/80 backdrop-blur-md rounded-full px-2 py-1 border border-stone-800 shadow-lg">
-                    <button 
-                        onClick={handleZoomOut}
-                        className="p-3 text-stone-300 hover:text-white disabled:opacity-50"
-                        disabled={scale <= 1}
-                    >
-                        <ZoomOut size={20} />
-                    </button>
-                    <div className="w-px bg-stone-700 my-2"></div>
-                    <button 
-                        onClick={handleZoomIn}
-                        className="p-3 text-stone-300 hover:text-white disabled:opacity-50"
-                        disabled={scale >= 4}
-                    >
-                        <ZoomIn size={20} />
-                    </button>
-                </div>
-            </div>
-        )}
     </div>
   );
 };

@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef, useMemo, memo, useContext, useCallback } from 'react';
 import { FilteredPost, RedditComment, RedditListing, CommentAnalysis, AIConfig } from '../types';
 import { fetchComments, fetchMoreChildren } from '../services/redditService';
@@ -578,6 +577,10 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
   // Registry to keep track of collapsed comments across virtualized unmounts
   const collapsedRegistry = useRef<Set<string>>(new Set());
 
+  const toxicCount = useMemo(() => {
+    return Object.values(commentAnalysisMap).filter((c: CommentAnalysis) => c.isToxic).length;
+  }, [commentAnalysisMap]);
+
   const isCollapsed = useCallback((id: string) => {
       return collapsedRegistry.current.has(id);
   }, []);
@@ -846,7 +849,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
         <div className="absolute inset-0 bg-black/60 backdrop-blur-md animate-fade-in" />
 
         <div 
-            className="bg-white dark:bg-stone-950 w-full md:max-w-4xl h-[100dvh] md:h-[85vh] md:rounded-2xl shadow-2xl flex flex-col overflow-hidden md:border border-stone-200 dark:border-stone-800 animate-modal-spring relative z-10"
+            className="bg-white dark:bg-stone-950 w-full md:max-w-6xl lg:max-w-7xl h-[100dvh] md:h-[90vh] md:rounded-2xl shadow-2xl flex flex-col overflow-hidden md:border border-stone-200 dark:border-stone-800 animate-modal-spring relative z-10"
             onClick={(e) => e.stopPropagation()}
         >
             {/* Header */}
@@ -886,7 +889,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                 ref={scrollContainerRef}
                 className="flex-1 overflow-y-auto bg-white dark:bg-stone-950 relative"
             >
-            <div className="p-4 md:p-8 md:pb-20 max-w-3xl mx-auto">
+            <div className="p-4 md:p-8 md:pb-20 max-w-5xl mx-auto">
                 <div className="flex gap-2 mb-4 animate-list-enter">
                     {post.zenScore !== undefined && (
                         <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border uppercase tracking-wider ${
@@ -921,6 +924,12 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                     <div className="flex items-center gap-2 text-stone-500 dark:text-stone-400">
                         <MessageSquare size={20} />
                         <span className="font-semibold text-sm">{post.num_comments} Comments</span>
+                        {toxicCount > 0 && (
+                            <div className="flex items-center gap-1 ml-2 px-2 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 text-xs font-bold rounded-full border border-orange-200 dark:border-orange-800/50 animate-fade-in" title="Toxic comments hidden by Zen Shield">
+                                <ShieldAlert size={12} />
+                                <span>{toxicCount} filtered</span>
+                            </div>
+                        )}
                     </div>
                 </div>
 

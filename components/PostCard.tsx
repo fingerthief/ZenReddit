@@ -1,7 +1,6 @@
-
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { FilteredPost, GalleryItem, ViewMode } from '../types';
-import { MessageSquare, ArrowBigUp, Image as ImageIcon, CirclePlay, Layers, ExternalLink } from 'lucide-react';
+import { MessageSquare, ArrowBigUp, Image as ImageIcon, CirclePlay, Layers, ExternalLink, Maximize2, Minimize2, Share2, Check } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface PostCardProps {
@@ -25,7 +24,33 @@ const decodeHtmlEntities = (str: string): string => {
 };
 
 const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNavigateSub, onImageClick, viewMode = 'card' }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [showCopied, setShowCopied] = useState(false);
   
+  const handleShare = async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const url = `https://www.reddit.com${post.permalink}`;
+      
+      if (navigator.share) {
+          try {
+              await navigator.share({
+                  title: post.title,
+                  url: url
+              });
+          } catch (err) {
+              // Ignore abort errors
+          }
+      } else {
+          try {
+              await navigator.clipboard.writeText(url);
+              setShowCopied(true);
+              setTimeout(() => setShowCopied(false), 2000);
+          } catch (err) {
+              console.error('Failed to copy', err);
+          }
+      }
+  };
+
   const handleMediaClick = (e: React.MouseEvent) => {
       e.stopPropagation();
 
@@ -157,20 +182,22 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
 
     if (previewSrc && (isVideo || isGallery || post.url.match(/\.(jpg|jpeg|png|gif|webp)$/i) || post.domain.includes('redd.it') || post.domain.includes('imgur'))) {
          const source = post.preview?.images?.[0]?.source;
-         const mediaStyle = (source?.width && source?.height) 
+         
+         const hasDimensions = !!(source?.width && source?.height);
+         const mediaStyle = hasDimensions 
             ? { aspectRatio: `${source.width} / ${source.height}` } 
             : undefined;
 
          return (
              <div 
-                className="relative mt-3 rounded-xl overflow-hidden bg-stone-100 dark:bg-stone-800 cursor-pointer group/media shadow-inner"
+                className={`relative mt-3 rounded-xl overflow-hidden bg-stone-100 dark:bg-stone-800 cursor-pointer group/media shadow-inner ${hasDimensions ? 'max-h-[600px]' : ''}`}
                 onClick={handleMediaClick}
                 style={mediaStyle}
              >
                  <img 
                     src={previewSrc} 
                     alt="preview" 
-                    className="w-full h-auto object-cover max-h-[500px] min-h-[150px] transition-transform duration-700 ease-out group-hover/media:scale-105"
+                    className={`w-full object-cover transition-transform duration-700 ease-out group-hover/media:scale-105 ${hasDimensions ? 'h-full' : 'h-auto max-h-[600px] min-h-[200px]'}`}
                     loading="lazy"
                  />
                  
@@ -239,13 +266,26 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
         >
             {hasThumb && (
                 <div 
-                    className="w-[80px] min-h-[80px] sm:w-[110px] sm:min-h-[90px] shrink-0 bg-stone-100 dark:bg-stone-800 relative group overflow-hidden"
-                    onClick={(e) => { e.stopPropagation(); handleMediaClick(e); }} 
+                    className="w-[80px] min-h-[80px] sm:w-[110px] sm:min-h-[90px] shrink-0 bg-stone-100 dark:bg-stone-800 relative group overflow-hidden cursor-pointer"
+                    onClick={(e) => { 
+                        e.stopPropagation(); 
+                        if (viewMode === 'compact') {
+                            setIsExpanded(!isExpanded);
+                        } else {
+                            handleMediaClick(e); 
+                        }
+                    }} 
                 >
                     <img src={thumb} alt="thumb" className="w-full h-full object-cover absolute inset-0 transition-transform duration-500 group-hover:scale-110" loading="lazy" />
-                    {(post.is_video || post.domain === 'v.redd.it') && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/10 group-hover:bg-black/30 transition-colors">
-                            <CirclePlay size={24} className="text-white drop-shadow-md transform group-hover:scale-110 transition-transform" />
+                    
+                    {/* Expand/Collapse Overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                         {isExpanded ? <Minimize2 size={24} className="text-white drop-shadow-md" /> : <Maximize2 size={24} className="text-white drop-shadow-md" />}
+                    </div>
+
+                    {!isExpanded && (post.is_video || post.domain === 'v.redd.it') && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/10 group-hover:hidden transition-colors">
+                            <CirclePlay size={24} className="text-white drop-shadow-md" />
                         </div>
                     )}
                 </div>
@@ -266,6 +306,15 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
                         />
                     )}
                 </div>
+
+                {isExpanded && (
+                    <div 
+                        className="w-full my-2 animate-list-enter"
+                        onClick={(e) => e.stopPropagation()} 
+                    >
+                        {mediaContent}
+                    </div>
+                )}
 
                 <div className="flex items-center justify-between mt-2 text-xs text-stone-500 dark:text-stone-400 gap-2">
                     <div className="flex items-center gap-1.5 truncate min-w-0">
@@ -288,6 +337,13 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
                             <MessageSquare size={12} className="stroke-[2.5px]" />
                             <span>{post.num_comments > 1000 ? `${(post.num_comments/1000).toFixed(1)}k` : post.num_comments}</span>
                          </div>
+                         <button 
+                             onClick={handleShare}
+                             className="flex items-center gap-1 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
+                             title="Share"
+                         >
+                            {showCopied ? <Check size={12} className="text-emerald-500" /> : <Share2 size={12} className="stroke-[2.5px]" />}
+                         </button>
                     </div>
                 </div>
             </div>
@@ -354,6 +410,17 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
               <MessageSquare size={16} />
               <span className="text-xs">{post.num_comments > 1000 ? `${(post.num_comments / 1000).toFixed(1)}k` : post.num_comments}</span>
             </div>
+            
+            <button 
+                onClick={handleShare}
+                className="flex items-center gap-1.5 hover:bg-stone-100 dark:hover:bg-stone-800 px-2 py-1 rounded-md transition-colors btn-press"
+                title="Share"
+            >
+                {showCopied ? <Check size={16} className="text-emerald-500" /> : <Share2 size={16} />}
+                <span className={`text-xs ${showCopied ? 'text-emerald-500 font-medium' : ''}`}>
+                    {showCopied ? 'Copied' : 'Share'}
+                </span>
+            </button>
             
             <div className="flex-1"></div>
             
