@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import PostCard from './components/PostCard';
@@ -8,6 +7,7 @@ import SettingsModal from './components/SettingsModal';
 import ScanningVisualizer from './components/ScanningVisualizer';
 import QuickSubSwitcher from './components/QuickSubSwitcher';
 import LazyRender from './components/LazyRender';
+import SubredditHeader from './components/SubredditHeader';
 import { FeedType, FilteredPost, RedditPostData, AIConfig, SortOption, TopTimeOption, CachedAnalysis, GalleryItem, ViewMode } from './types';
 import { fetchFeed } from './services/redditService';
 import { analyzePostsForZen, AnalysisResult } from './services/aiService';
@@ -230,6 +230,15 @@ const App: React.FC = () => {
   const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
   const handleFollow = (sub: string) => !followedSubs.includes(sub) && setFollowedSubs(prev => [...prev, sub]);
   const handleUnfollow = (sub: string) => setFollowedSubs(prev => prev.filter(s => s !== sub));
+  
+  const handleToggleFollow = (sub: string) => {
+      if (followedSubs.includes(sub)) {
+          handleUnfollow(sub);
+      } else {
+          handleFollow(sub);
+      }
+  };
+
   const handleSaveSettings = (config: AIConfig) => setAiConfig(config);
 
   const handlePostClick = useCallback((post: FilteredPost) => {
@@ -563,50 +572,62 @@ const App: React.FC = () => {
          <div className="max-w-[1800px] mx-auto px-4 pt-16 md:pt-8 md:px-6 pb-8">
             {/* Search Bar */}
             <form onSubmit={handleSearchSubmit} className="relative mb-6 group max-w-3xl mx-auto transform transition-all duration-300 hover:scale-[1.01]">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Search className="h-5 w-5 text-stone-400 group-focus-within:text-emerald-500 transition-colors duration-300" />
-                </div>
-                
-                <div className="relative flex items-center w-full">
-                    {/* Context Pill */}
+                {/* Search Container - using Flexbox for layout */}
+                <div className="relative flex items-center w-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl shadow-sm group-focus-within:shadow-md focus-within:ring-2 focus-within:ring-emerald-500/30 focus-within:border-emerald-500 transition-all overflow-hidden">
+                    
+                    {/* Search Icon */}
+                    <div className="pl-4 pr-2 flex items-center pointer-events-none shrink-0">
+                        <Search className="h-5 w-5 text-stone-400 group-focus-within:text-emerald-500 transition-colors duration-300" />
+                    </div>
+                    
+                    {/* Context Pill (Subreddit Label) */}
                     {currentSub && searchRestricted && (
-                        <div className="absolute left-10 flex items-center gap-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-md text-sm font-medium animate-fade-in z-10 border border-emerald-200 dark:border-emerald-800/50">
-                            <span>r/{currentSub}</span>
+                        <div className="flex items-center gap-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-md text-sm font-medium animate-fade-in whitespace-nowrap border border-emerald-200 dark:border-emerald-800/50 mr-1 shrink-0 max-w-[120px] sm:max-w-[200px]">
+                            <span className="truncate">r/{currentSub}</span>
                             <button 
                                 type="button" 
                                 onClick={() => setSearchRestricted(false)}
-                                className="hover:text-emerald-900 dark:hover:text-emerald-200 rounded-full p-0.5"
+                                className="hover:text-emerald-900 dark:hover:text-emerald-200 rounded-full p-0.5 shrink-0"
                             >
                                 <X size={14} />
                             </button>
                         </div>
                     )}
                     
+                    {/* Search Input */}
                     <input
                         type="text"
                         value={searchInput}
                         onChange={(e) => setSearchInput(e.target.value)}
                         onKeyDown={(e) => {
-                             // If user backspaces on empty input and context is active, remove context
                              if (e.key === 'Backspace' && searchInput === '' && currentSub && searchRestricted) {
                                  setSearchRestricted(false);
                              }
                         }}
                         placeholder={currentSub && searchRestricted ? "" : "Search Reddit..."}
-                        className={`block w-full pr-4 py-3 border border-stone-200 dark:border-stone-800 rounded-2xl leading-5 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-all shadow-sm group-focus-within:shadow-md ${currentSub && searchRestricted ? 'pl-36' : 'pl-11'}`}
+                        className="block w-full py-3 pr-4 bg-transparent border-none focus:ring-0 text-stone-900 dark:text-stone-100 placeholder-stone-400 leading-5 min-w-[50px]"
                     />
                 </div>
             </form>
 
+            {/* Subreddit Header */}
+            {currentFeed === 'subreddit' && currentSub && (
+                <SubredditHeader 
+                    subreddit={currentSub}
+                    isFollowed={followedSubs.includes(currentSub)}
+                    onToggleFollow={() => handleToggleFollow(currentSub)}
+                />
+            )}
+
             {/* Toolbar */}
-            <div className="flex items-center justify-between mb-6 max-w-3xl mx-auto xl:max-w-none">
-                <div className="flex items-center gap-2 overflow-x-auto pb-2 hide-scrollbar mask-gradient-right">
+            <div className="flex items-center justify-between gap-4 mb-6 max-w-3xl mx-auto xl:max-w-none">
+                <div className="flex-1 min-w-0 flex items-center gap-2 overflow-x-auto pb-2 hide-scrollbar">
                     {/* Sort Buttons */}
                     {(['hot', 'new', 'top', 'rising'] as SortOption[]).map((option) => (
                         <button
                         key={option}
                         onClick={() => setCurrentSort(option)}
-                        className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 capitalize whitespace-nowrap btn-press ${
+                        className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 capitalize whitespace-nowrap btn-press shrink-0 ${
                             currentSort === option 
                             ? 'bg-stone-800 text-white dark:bg-stone-100 dark:text-stone-900 shadow-md transform scale-105' 
                             : 'bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-400 border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800'
@@ -636,7 +657,7 @@ const App: React.FC = () => {
                     )}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                     {/* View Mode Toggle */}
                     <div className="flex bg-white dark:bg-stone-900 rounded-lg border border-stone-200 dark:border-stone-800 p-1 shrink-0 shadow-sm">
                         <button 

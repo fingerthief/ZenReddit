@@ -1,6 +1,7 @@
 
 
-import { RedditPost, RedditComment, RedditMore, SortOption, TopTimeOption } from '../types';
+
+import { RedditPost, RedditComment, RedditMore, SortOption, TopTimeOption, SubredditAbout } from '../types';
 
 const BASE_URL = 'https://www.reddit.com';
 const TIMEOUT_MS = 10000;
@@ -215,5 +216,19 @@ export const searchSubreddits = async (query: string): Promise<string[]> => {
     return data.data.children.map((child: any) => child.data.display_name);
   } catch (error) {
     return [];
+  }
+};
+
+export const fetchSubredditAbout = async (subreddit: string): Promise<SubredditAbout | null> => {
+  const url = `${BASE_URL}/r/${subreddit}/about.json?raw_json=1`;
+  try {
+    const data = await fetchWithProxy(url);
+    if (data && data.data) {
+      return data.data;
+    }
+    return null;
+  } catch (error) {
+    console.error("Failed to fetch subreddit details", error);
+    return null;
   }
 };

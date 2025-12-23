@@ -109,6 +109,23 @@ export interface RedditComment {
   data: RedditCommentData;
 }
 
+export interface SubredditAbout {
+  display_name: string;
+  display_name_prefixed: string;
+  title: string;
+  public_description: string;
+  subscribers: number;
+  active_user_count?: number;
+  icon_img?: string;
+  community_icon?: string;
+  banner_background_image?: string;
+  banner_img?: string;
+  mobile_banner_image?: string;
+  primary_color?: string;
+  key_color?: string;
+  created_utc: number;
+}
+
 // App State Types
 
 export interface FilteredPost extends RedditPostData {
