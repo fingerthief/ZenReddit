@@ -126,7 +126,15 @@ export const fetchFeed = async (
   
   if (type === 'search' && searchQuery) {
     const searchSort = sort === 'rising' ? 'relevance' : sort;
-    url = `${BASE_URL}/search.json?q=${encodeURIComponent(searchQuery)}&sort=${searchSort}&limit=${limit}&raw_json=1`;
+    
+    if (subreddit) {
+        // Contextual search within a subreddit
+        url = `${BASE_URL}/r/${subreddit}/search.json?q=${encodeURIComponent(searchQuery)}&restrict_sr=on&sort=${searchSort}&limit=${limit}&raw_json=1`;
+    } else {
+        // Global search
+        url = `${BASE_URL}/search.json?q=${encodeURIComponent(searchQuery)}&sort=${searchSort}&limit=${limit}&raw_json=1`;
+    }
+
   } else {
     let path = '';
     if (type === 'popular') path = '/r/popular';

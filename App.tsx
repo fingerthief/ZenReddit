@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import PostCard from './components/PostCard';
@@ -10,7 +11,7 @@ import LazyRender from './components/LazyRender';
 import { FeedType, FilteredPost, RedditPostData, AIConfig, SortOption, TopTimeOption, CachedAnalysis, GalleryItem, ViewMode } from './types';
 import { fetchFeed } from './services/redditService';
 import { analyzePostsForZen, AnalysisResult } from './services/aiService';
-import { Loader2, RefreshCw, Menu, CloudOff, TriangleAlert, Search, ChevronDown, LayoutGrid, List } from 'lucide-react';
+import { Loader2, RefreshCw, Menu, CloudOff, TriangleAlert, Search, ChevronDown, LayoutGrid, List, X } from 'lucide-react';
 
 const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
   try {
@@ -63,6 +64,7 @@ const App: React.FC = () => {
   
   // Local UI state for search input
   const [searchInput, setSearchInput] = useState('');
+  const [searchRestricted, setSearchRestricted] = useState(true);
 
   // Sorting State
   const [currentSort, setCurrentSort] = useState<SortOption>(() => loadFromStorage<SortOption>('zen_sort', 'hot'));
@@ -219,6 +221,11 @@ const App: React.FC = () => {
     }
   }, [currentSearchQuery, currentFeed]);
 
+  // Reset search restricted state when changing subs
+  useEffect(() => {
+      setSearchRestricted(true);
+  }, [currentSub]);
+
   // --- Handlers ---
   const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
   const handleFollow = (sub: string) => !followedSubs.includes(sub) && setFollowedSubs(prev => [...prev, sub]);
@@ -280,7 +287,8 @@ const App: React.FC = () => {
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchInput.trim()) {
-        handleNavigate('search', undefined, searchInput.trim());
+        const targetSub = searchRestricted ? currentSub : undefined;
+        handleNavigate('search', targetSub, searchInput.trim());
     }
   };
 
@@ -558,13 +566,36 @@ const App: React.FC = () => {
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <Search className="h-5 w-5 text-stone-400 group-focus-within:text-emerald-500 transition-colors duration-300" />
                 </div>
-                <input
-                    type="text"
-                    value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
-                    placeholder="Search Reddit..."
-                    className="block w-full pl-11 pr-4 py-3 border border-stone-200 dark:border-stone-800 rounded-2xl leading-5 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-all shadow-sm group-focus-within:shadow-md"
-                />
+                
+                <div className="relative flex items-center w-full">
+                    {/* Context Pill */}
+                    {currentSub && searchRestricted && (
+                        <div className="absolute left-10 flex items-center gap-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-md text-sm font-medium animate-fade-in z-10 border border-emerald-200 dark:border-emerald-800/50">
+                            <span>r/{currentSub}</span>
+                            <button 
+                                type="button" 
+                                onClick={() => setSearchRestricted(false)}
+                                className="hover:text-emerald-900 dark:hover:text-emerald-200 rounded-full p-0.5"
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
+                    )}
+                    
+                    <input
+                        type="text"
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        onKeyDown={(e) => {
+                             // If user backspaces on empty input and context is active, remove context
+                             if (e.key === 'Backspace' && searchInput === '' && currentSub && searchRestricted) {
+                                 setSearchRestricted(false);
+                             }
+                        }}
+                        placeholder={currentSub && searchRestricted ? "" : "Search Reddit..."}
+                        className={`block w-full pr-4 py-3 border border-stone-200 dark:border-stone-800 rounded-2xl leading-5 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-all shadow-sm group-focus-within:shadow-md ${currentSub && searchRestricted ? 'pl-36' : 'pl-11'}`}
+                    />
+                </div>
             </form>
 
             {/* Toolbar */}

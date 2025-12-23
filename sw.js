@@ -1,4 +1,5 @@
-const CACHE_NAME = 'zen-reddit-v1';
+
+const CACHE_NAME = 'zen-reddit-v2';
 const URLS_TO_CACHE = [
   '/',
   '/index.html',
@@ -17,12 +18,11 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
+          if (cacheName !== CACHE_NAME) {
             return caches.delete(cacheName);
           }
         })
@@ -33,21 +33,25 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Only handle GET requests
+  if (event.request.method !== 'GET') return;
+
   const url = new URL(event.request.url);
 
-  // If it's an API call or external resource, go to network
-  if (url.origin !== self.location.origin || url.pathname.includes('/api/')) {
-     event.respondWith(fetch(event.request));
+  // For API calls or external resources, use network-only but with a simple error fallback if needed
+  if (url.origin !== self.location.origin || url.pathname.includes('/api/') || url.pathname.includes('.json')) {
      return;
   }
 
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
-        if (response) {
-          return response;
-        }
-        return fetch(event.request);
+        return response || fetch(event.request).catch(() => {
+          // If both fail and it's a navigation request, return index.html
+          if (event.request.mode === 'navigate') {
+            return caches.match('/');
+          }
+        });
       })
   );
 });
