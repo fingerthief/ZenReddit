@@ -1,11 +1,39 @@
+
 import { RedditPost, RedditComment, RedditMore, SortOption, TopTimeOption, SubredditAbout } from '../types';
 
 const BASE_URL = 'https://www.reddit.com';
 const REQUEST_TIMEOUT_MS = 15000;
 const MAX_RETRIES = 3;
-const MAX_CONCURRENT_REQUESTS = 3; // Throttles simultaneous network calls
+const MAX_CONCURRENT_REQUESTS = 3; 
 
-// Generate a random session ID
+// --- Caching System ---
+
+interface CacheEntry {
+  data: any;
+  timestamp: number;
+  expiry: number;
+}
+
+const apiCache = new Map<string, CacheEntry>();
+
+// Cache durations in milliseconds
+const TTL = {
+  FEED: 5 * 60 * 1000,      // 5 minutes for feeds
+  COMMENTS: 10 * 60 * 1000, // 10 minutes for comment threads
+  ABOUT: 24 * 60 * 60 * 1000, // 24 hours for subreddit sidebar/icons
+  SEARCH: 10 * 60 * 1000,    // 10 minutes for search results
+  DEFAULT: 2 * 60 * 1000     // 2 minutes default
+};
+
+const getCacheTTL = (url: string): number => {
+  if (url.includes('/about.json')) return TTL.ABOUT;
+  if (url.includes('/comments/')) return TTL.COMMENTS;
+  if (url.includes('/search.json')) return TTL.SEARCH;
+  if (url.includes('/r/') || url.includes('popular') || url.includes('all')) return TTL.FEED;
+  return TTL.DEFAULT;
+};
+
+// Generate a random session ID for user agent consistency
 const SESSION_ID = Math.random().toString(36).substring(7);
 
 const HEADERS = {
@@ -26,7 +54,6 @@ const PROXY_PROVIDERS = [
 const getShuffledProxies = (method: string = 'GET') => {
   let proxies = [...PROXY_PROVIDERS];
   if (method === 'POST') {
-      // Filter for proxies that reliably support POST
       return [
           (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`
       ];
@@ -99,23 +126,33 @@ const fetchWithTimeout = async (url: string, options: RequestInit = {}) => {
     }
 }
 
-const fetchWithProxy = async (url: string, options?: RequestInit) => {
+const fetchWithProxy = async (url: string, options?: RequestInit, skipCache: boolean = false) => {
+  // 1. Check Cache (GET requests only)
+  const isGet = !options?.method || options.method === 'GET';
+  
+  if (isGet && !skipCache) {
+    const cached = apiCache.get(url);
+    if (cached && Date.now() < cached.expiry) {
+      // Return a deep copy to prevent mutation of cached data
+      return JSON.parse(JSON.stringify(cached.data)); 
+    }
+  }
+
+  // 2. Perform Network Request via Queue
   return globalRequestQueue.add(async () => {
     let lastError: Error | null = null;
     const method = options?.method || 'GET';
     const proxiesToTry = getShuffledProxies(method);
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      // Rotate proxy per attempt
       const provider = proxiesToTry[attempt % proxiesToTry.length];
       
       try {
         const separator = url.includes('?') ? '&' : '?';
-        // Add cache buster to prevent stale proxy caches
-        const urlWithParams = `${url}${separator}cb=${Date.now()}`;
-        const targetUrl = provider(urlWithParams);
+        // Cache buster only used if skipping internal cache to force fresh proxy fetch
+        const cbParam = skipCache ? `${separator}cb=${Date.now()}` : '';
+        const targetUrl = provider(url + cbParam);
         
-        // Add artificial delay (jitter) on retries to allow rate limits to cool down
         if (attempt > 0) {
            const backoff = 1000 * Math.pow(2, attempt) + (Math.random() * 500);
            await wait(backoff);
@@ -129,7 +166,6 @@ const fetchWithProxy = async (url: string, options?: RequestInit) => {
           }
         });
 
-        // Robust Error Handling
         if (response.status === 429) {
           console.warn(`Rate limit hit (429) on proxy ${attempt}. Retrying...`);
           throw new Error('RateLimit');
@@ -140,8 +176,6 @@ const fetchWithProxy = async (url: string, options?: RequestInit) => {
         }
 
         if (!response.ok) {
-          // 403/404 from Reddit are usually permanent (private sub, deleted post)
-          // Do not retry these.
           if (response.status === 403 || response.status === 404) {
              const error: any = new Error(`Reddit Error: ${response.status}`);
              error.status = response.status;
@@ -155,19 +189,31 @@ const fetchWithProxy = async (url: string, options?: RequestInit) => {
         try {
           const json = JSON.parse(text);
           if (json.error) throw new Error(`Reddit API Error: ${json.message || json.error}`);
+          
+          // 3. Save to Cache
+          if (isGet) {
+            apiCache.set(url, {
+              data: json,
+              timestamp: Date.now(),
+              expiry: Date.now() + getCacheTTL(url)
+            });
+            
+            // Limit cache size (LRU-ish: delete oldest if too big)
+            if (apiCache.size > 100) {
+                const oldestKey = apiCache.keys().next().value;
+                if (oldestKey) apiCache.delete(oldestKey);
+            }
+          }
+
           return json;
         } catch (e) {
-          // If we got HTML instead of JSON, the proxy likely failed or returned an error page
           throw new Error('Received invalid JSON data (likely HTML error page).');
         }
 
       } catch (error: any) {
-        // Stop immediately for permanent Reddit errors
         if (error.message.includes('Reddit Error') || error.status === 403 || error.status === 404) {
              throw error;
         }
-        
-        // If it's a rate limit or network error, we loop to the next attempt
         console.warn(`Attempt ${attempt + 1} failed: ${error.message}`);
         lastError = error;
       }
@@ -187,7 +233,8 @@ export const fetchFeed = async (
   searchQuery?: string,
   sort: SortOption = 'hot',
   time: TopTimeOption = 'day',
-  limit: number = 25
+  limit: number = 25,
+  skipCache: boolean = false
 ): Promise<{ posts: RedditPost[]; after: string | null }> => {
   let url = '';
   
@@ -195,10 +242,8 @@ export const fetchFeed = async (
     const searchSort = sort === 'rising' ? 'relevance' : sort;
     
     if (subreddit) {
-        // Contextual search within a subreddit
         url = `${BASE_URL}/r/${subreddit}/search.json?q=${encodeURIComponent(searchQuery)}&restrict_sr=on&sort=${searchSort}&limit=${limit}&raw_json=1`;
     } else {
-        // Global search
         url = `${BASE_URL}/search.json?q=${encodeURIComponent(searchQuery)}&sort=${searchSort}&limit=${limit}&raw_json=1`;
     }
 
@@ -220,7 +265,7 @@ export const fetchFeed = async (
   }
 
   try {
-    const data = await fetchWithProxy(url);
+    const data = await fetchWithProxy(url, undefined, skipCache);
     
     if (!data || !data.data || !data.data.children) {
         return { posts: [], after: null };
@@ -251,7 +296,7 @@ export const fetchComments = async (permalink: string): Promise<(RedditComment |
 };
 
 export const fetchMoreChildren = async (linkId: string, children: string[]): Promise<any[]> => {
-    // Split children into chunks of 20 to avoid URL length issues or heavy payloads
+    // POST requests are not cached
     const chunkSize = 20;
     const chunks = [];
     for (let i = 0; i < children.length; i += chunkSize) {

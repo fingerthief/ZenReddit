@@ -346,7 +346,8 @@ const App: React.FC = () => {
       if (pullY > 60) { 
           setPullY(60); 
           setIsRefreshing(true);
-          loadPosts(false).finally(() => {
+          // Pass true to skipCache to force a network refresh
+          loadPosts(false, true).finally(() => {
               setIsRefreshing(false);
               setPullY(0);
           });
@@ -370,7 +371,7 @@ const App: React.FC = () => {
 
   const handlePostNavigateSub = (sub: string) => handleNavigate('subreddit', sub);
 
-  const loadPosts = useCallback(async (isLoadMore = false) => {
+  const loadPosts = useCallback(async (isLoadMore = false, forceRefresh = false) => {
     // If loading or analyzing, allow refresh (isLoadMore=false), but block duplicate loadMore
     if ((loading || analyzing) && isLoadMore) return;
     
@@ -381,7 +382,7 @@ const App: React.FC = () => {
     }
 
     if (!isLoadMore) {
-        if (!isRefreshing) setPosts([]); 
+        if (!isRefreshing && forceRefresh) setPosts([]); 
         setLoading(true);
         setError(null);
     } else {
@@ -402,7 +403,8 @@ const App: React.FC = () => {
         currentSearchQuery,
         currentSort,
         currentTopTime,
-        pageSize
+        pageSize,
+        forceRefresh // Pass skipCache param
       );
       
       if (abortControllerRef.current?.signal.aborted) return;
@@ -688,7 +690,7 @@ const App: React.FC = () => {
                     </div>
 
                     <button 
-                        onClick={() => loadPosts(false)} 
+                        onClick={() => loadPosts(false, true)} 
                         className={`p-2 rounded-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-all duration-200 shrink-0 shadow-sm btn-press ${loading ? 'animate-spin' : ''}`}
                         title="Refresh"
                     >
@@ -708,7 +710,7 @@ const App: React.FC = () => {
                     <CloudOff size={48} className="text-stone-300 mb-4" />
                     <h3 className="text-xl font-medium text-stone-600 dark:text-stone-400">Connection Error</h3>
                     <p className="text-stone-500 dark:text-stone-500 mt-2 mb-6 max-w-sm">{error}</p>
-                    <button onClick={() => loadPosts(false)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 btn-press">Try Again</button>
+                    <button onClick={() => loadPosts(false, true)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 btn-press">Try Again</button>
                 </div>
             ) : (
                 <>
