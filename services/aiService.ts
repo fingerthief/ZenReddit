@@ -16,7 +16,7 @@ const cleanJsonString = (str: string) => {
 
 const PROMPT_MODEL_ID = 'gemini-2.0-flash-lite-preview-02-05';
 // We need a model that supports search grounding for fact checking
-const FACT_CHECK_MODEL_ID = 'gemini-2.0-flash-exp'; 
+const FACT_CHECK_MODEL_ID = 'gemini-2.0-flash-lite-preview-02-05'; 
 
 export const analyzePostsForZen = async (posts: RedditPostData[], config?: AIConfig): Promise<AnalysisResult[]> => {
   if (posts.length === 0) return [];
@@ -315,7 +315,10 @@ export const factCheckComment = async (
             1. Search for reliable sources to verify the claims.
             2. Determine a verdict: "True", "False", "Misleading", "Opinion" (if subjective), or "Unverified".
             3. Provide a concise explanation (max 2 sentences).
-            4. Do not use JSON output format for this request, just return the text so we can extract citations.
+            
+            Format your response exactly like this:
+            Verdict: [Verdict]
+            Explanation: [Explanation]
         `;
 
         const response = await ai.models.generateContent({
@@ -323,8 +326,6 @@ export const factCheckComment = async (
             contents: prompt,
             config: {
                 tools: [{ googleSearch: {} }],
-                // We do NOT use responseMimeType: 'application/json' here because
-                // we need to access the groundingMetadata chunks which are tied to the text generation.
             }
         });
 
@@ -345,19 +346,35 @@ export const factCheckComment = async (
 
         const text = response.text || "";
         
-        // Simple heuristic parsing of the free-text response since we didn't force JSON
-        // (Forcing JSON with tools sometimes degrades the tool usage quality in smaller models)
         let verdict: FactCheckResult['verdict'] = 'Unverified';
-        const lowerText = text.toLowerCase();
-        
-        if (lowerText.includes('verdict: true') || lowerText.startsWith('true')) verdict = 'True';
-        else if (lowerText.includes('verdict: false') || lowerText.startsWith('false')) verdict = 'False';
-        else if (lowerText.includes('verdict: misleading') || lowerText.startsWith('misleading')) verdict = 'Misleading';
-        else if (lowerText.includes('verdict: opinion') || lowerText.startsWith('opinion')) verdict = 'Opinion';
+        let explanation = text;
+
+        // More robust Regex parsing
+        const verdictRegex = /Verdict:\s*\*?([a-zA-Z]+)\*?/i;
+        const match = text.match(verdictRegex);
+
+        if (match && match[1]) {
+            const v = match[1].toLowerCase();
+            if (v === 'true') verdict = 'True';
+            else if (v === 'false') verdict = 'False';
+            else if (v === 'misleading') verdict = 'Misleading';
+            else if (v === 'opinion') verdict = 'Opinion';
+            else if (v === 'unverified') verdict = 'Unverified';
+        }
+
+        // Try to extract just the explanation part if the format was followed
+        const explRegex = /Explanation:\s*(.*)/is;
+        const explMatch = text.match(explRegex);
+        if (explMatch && explMatch[1]) {
+            explanation = explMatch[1].trim();
+        } else {
+             // Fallback: Remove the verdict line if found at the start
+             explanation = text.replace(verdictRegex, '').trim();
+        }
         
         return {
             verdict,
-            explanation: text, // The full text acts as the explanation
+            explanation: explanation,
             sources: sources.filter((s, i, self) => 
                 self.findIndex((t) => t.uri === s.uri) === i
             ).slice(0, 5) // Dedupe and limit
