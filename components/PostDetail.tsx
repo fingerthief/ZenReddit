@@ -1,9 +1,8 @@
-
 import React, { useEffect, useState, useRef, useMemo, memo, useContext, useCallback } from 'react';
 import { FilteredPost, RedditComment, RedditListing, CommentAnalysis, AIConfig, RedditMore, GalleryItem } from '../types';
 import { fetchComments, fetchMoreChildren } from '../services/redditService';
 import { analyzeCommentsForZen } from '../services/aiService';
-import { X, ExternalLink, Loader2, ArrowBigUp, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MessageSquare, Images, Plus, MoreHorizontal, ShieldAlert, Eye, Captions, CornerDownRight, Maximize2 } from 'lucide-react';
+import { X, ExternalLink, Loader2, ArrowBigUp, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MessageSquare, Images, Plus, MoreHorizontal, ShieldAlert, Eye, Captions, CornerDownRight, Maximize2, Share2, Clock, User } from 'lucide-react';
 import Hls from 'hls.js';
 import { formatDistanceToNow } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
@@ -56,10 +55,6 @@ const FlairBadge: React.FC<{ text: string; bgColor?: string; textColor?: 'dark' 
   if (!text) return null;
   
   const hasBg = bgColor && bgColor !== 'transparent' && bgColor !== '';
-  
-  // When Reddit provides a color, it often assumes their own platform's contrast.
-  // We force high contrast here. 'light' means text should be white on dark bg.
-  // 'dark' means text should be dark on light bg.
   const isLightText = textColor === 'light';
   
   const style: React.CSSProperties = {
@@ -88,23 +83,16 @@ const extractMediaFromText = (text: string) => {
   const matches = text.match(urlRegex) || [];
   
   return matches.map(url => {
-    // Clean URL (remove markdown parenthesis/brackets if present at end)
     return url.replace(/[)\]]+$/, '');
   }).map(url => {
-      // Convert .gifv to .mp4 for proper playback
       if (url.match(/\.gifv$/i)) {
           return url.replace(/\.gifv$/i, '.mp4');
       }
       return url;
   }).filter(url => {
     const lowerUrl = url.toLowerCase();
-    // Remove query params for extension check
     const urlNoParams = lowerUrl.split('?')[0];
-    
-    // Allowed extensions
     const hasMediaExt = urlNoParams.match(/\.(jpeg|jpg|png|gif|webp|bmp|mp4|webm|mov)$/);
-    
-    // Allowed domains that might act as media
     const isReddit = lowerUrl.includes('preview.redd.it') || lowerUrl.includes('i.redd.it') || lowerUrl.includes('external-preview.redd.it');
     const isGiphy = lowerUrl.includes('giphy.com/media') || lowerUrl.includes('media.giphy.com');
     const isImgur = lowerUrl.includes('i.imgur.com');
@@ -128,11 +116,9 @@ const MarkdownRenderer: React.FC<{ content: string; onNavigateSub?: (sub: string
         components={{
             // @ts-ignore
             a: ({node, href, ...props}) => {
-                // Intercept internal reddit links (e.g., /r/funny or r/funny)
                 const isSubLink = href?.match(/^(\/)?r\/([^/]+)/) || href?.match(/^https?:\/\/(www\.)?reddit\.com\/r\/([^/]+)/);
                 
                 if (isSubLink && onNavigateSub) {
-                     // isSubLink[2] contains the subreddit name in both regex patterns
                      const subName = isSubLink[2];
                      return (
                         <a 
@@ -946,44 +932,41 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
             className="bg-white dark:bg-stone-950 w-full md:max-w-6xl lg:max-w-7xl h-[100dvh] md:h-[90vh] md:rounded-2xl shadow-2xl flex flex-col overflow-hidden md:border border-stone-200 dark:border-stone-800 animate-modal-spring relative z-10"
             onClick={(e) => e.stopPropagation()}
         >
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-stone-200 dark:border-stone-800 bg-white/90 dark:bg-stone-950/90 backdrop-blur-md shrink-0 sticky top-0 z-20">
-            <div className="flex items-center gap-3 overflow-hidden">
-                <button onClick={onClose} className="p-2 -ml-2 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-full transition-colors shrink-0 md:hidden btn-press">
-                    <ChevronLeft size={24} className="text-stone-800 dark:text-stone-200" />
-                </button>
-                
-                <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0 text-emerald-600 dark:text-emerald-400 font-bold text-sm">
-                        r/
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                        <button 
+            {/* Responsive Header */}
+            <div className="flex items-center justify-between px-3 md:px-4 py-3 border-b border-stone-200 dark:border-stone-800 bg-white/90 dark:bg-stone-950/90 backdrop-blur-md shrink-0 sticky top-0 z-20 h-16 md:h-auto">
+                <div className="flex items-center gap-3 overflow-hidden flex-1">
+                    <button onClick={onClose} className="p-2 -ml-2 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-full transition-colors shrink-0 md:hidden btn-press">
+                        <ChevronLeft size={24} className="text-stone-800 dark:text-stone-200" />
+                    </button>
+                    
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div 
+                            className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0 text-emerald-600 dark:text-emerald-400 font-bold text-sm md:text-base cursor-pointer"
                             onClick={() => onNavigateSub && onNavigateSub(post.subreddit)}
-                            className="font-bold text-stone-900 dark:text-stone-100 truncate text-sm md:text-base hover:text-emerald-600 dark:hover:text-emerald-400 text-left transition-colors"
                         >
-                            {post.subreddit}
-                        </button>
-                        <div className="text-xs text-stone-500 dark:text-stone-400 truncate flex items-center gap-1.5 flex-wrap">
-                            <span>Posted by u/{post.author}</span>
-                            {post.author_flair_text && (
-                                <FlairBadge 
-                                    text={post.author_flair_text} 
-                                    bgColor={post.author_flair_background_color}
-                                    textColor={post.author_flair_text_color}
-                                    className="scale-90 origin-left"
-                                />
-                            )}
-                            <span>•</span>
-                            <span>{formatDistanceToNow(new Date(post.created_utc * 1000))} ago</span>
+                            r/
+                        </div>
+                        <div className="flex flex-col min-w-0 justify-center">
+                            <button 
+                                onClick={() => onNavigateSub && onNavigateSub(post.subreddit)}
+                                className="font-bold text-stone-900 dark:text-stone-100 truncate text-sm md:text-base hover:text-emerald-600 dark:hover:text-emerald-400 text-left transition-colors leading-tight"
+                            >
+                                {post.subreddit}
+                            </button>
+                            <div className="text-xs text-stone-500 dark:text-stone-400 truncate flex items-center gap-1.5 leading-tight opacity-80">
+                                <span className="hidden sm:inline">Posted by u/{post.author}</span>
+                                <span className="sm:hidden">u/{post.author}</span>
+                                <span className="text-stone-300 dark:text-stone-700">•</span>
+                                <span className="shrink-0">{formatDistanceToNow(new Date(post.created_utc * 1000)).replace('about ', '').replace(' hours', 'h')} ago</span>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <button onClick={onClose} className="hidden md:block p-2 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-full transition-colors shrink-0 btn-press">
-                <X size={24} className="text-stone-500 dark:text-stone-400" />
-            </button>
+                {/* Desktop Close Button */}
+                <button onClick={onClose} className="hidden md:block p-2 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-full transition-colors shrink-0 btn-press ml-2">
+                    <X size={24} className="text-stone-500 dark:text-stone-400" />
+                </button>
             </div>
 
             {/* Content */}
@@ -993,7 +976,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
             >
             <div className="p-4 md:p-8 md:pb-20 max-w-5xl mx-auto">
                 {/* Post Title & Meta */}
-                <div className="mb-6">
+                <div className="mb-4 md:mb-6">
                     <div className="flex flex-wrap items-center gap-2 mb-3">
                         {post.link_flair_text && (
                              <FlairBadge 
@@ -1006,7 +989,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                         {post.isRageBait && (
                             <span className="text-[10px] font-bold uppercase tracking-wider text-red-500 bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded border border-red-100 dark:border-red-900/30 flex items-center gap-1">
                                 <ShieldAlert size={10} />
-                                Rage Bait Detected
+                                Rage Bait
                             </span>
                         )}
 
@@ -1016,12 +999,12 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                                 post.zenScore >= 50 ? 'text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800' :
                                 'text-orange-600 bg-orange-50 border-orange-200 dark:bg-orange-900/20 dark:border-orange-800'
                             }`}>
-                                Zen Score: {post.zenScore}
+                                Zen: {post.zenScore}
                             </span>
                         )}
                     </div>
 
-                    <h1 className="text-xl md:text-2xl font-bold text-stone-900 dark:text-stone-100 leading-snug mb-4">
+                    <h1 className="text-lg md:text-2xl font-bold text-stone-900 dark:text-stone-100 leading-snug mb-4">
                         {decodeHtmlEntities(post.title)}
                     </h1>
 
@@ -1033,26 +1016,33 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                         </div>
                     )}
                     
-                    <div className="flex items-center gap-4 text-stone-500 dark:text-stone-400 border-b border-stone-200 dark:border-stone-800 pb-6 mb-6">
-                        <div className="flex items-center gap-2 bg-stone-100 dark:bg-stone-800 px-3 py-1.5 rounded-full">
-                             <ArrowBigUp size={20} className={`${post.score > 0 ? 'text-orange-500' : ''}`} strokeWidth={2.5} />
-                             <span className="font-bold text-stone-700 dark:text-stone-300">{post.score > 1000 ? `${(post.score/1000).toFixed(1)}k` : post.score}</span>
+                    {/* Responsive Stats Bar */}
+                    <div className="flex items-center justify-between gap-3 text-stone-500 dark:text-stone-400 border-y border-stone-100 dark:border-stone-800/50 py-3 mb-6 bg-stone-50/50 dark:bg-stone-900/30 rounded-lg px-3 md:px-4">
+                        <div className="flex items-center gap-4 md:gap-6">
+                            <div className="flex items-center gap-1.5 md:gap-2" title="Upvotes">
+                                <ArrowBigUp size={22} className={`${post.score > 0 ? 'text-orange-600 dark:text-orange-500' : ''}`} strokeWidth={2.5} />
+                                <span className="font-bold text-stone-700 dark:text-stone-300 text-sm md:text-base">
+                                    {post.score > 1000 ? `${(post.score/1000).toFixed(1)}k` : post.score}
+                                </span>
+                            </div>
+                            <div className="w-px h-4 bg-stone-300 dark:bg-stone-700"></div>
+                            <div className="flex items-center gap-1.5 md:gap-2" title="Comments">
+                                <MessageSquare size={20} className="text-stone-400 dark:text-stone-500" />
+                                <span className="font-bold text-stone-700 dark:text-stone-300 text-sm md:text-base">
+                                    {post.num_comments > 1000 ? `${(post.num_comments/1000).toFixed(1)}k` : post.num_comments}
+                                </span>
+                                <span className="hidden md:inline text-sm font-medium">Comments</span>
+                            </div>
                         </div>
-                         <div className="flex items-center gap-2 bg-stone-100 dark:bg-stone-800 px-3 py-1.5 rounded-full">
-                             <MessageSquare size={18} />
-                             <span className="font-medium text-stone-700 dark:text-stone-300">{post.num_comments} Comments</span>
-                        </div>
-                        
-                        <div className="flex-1"></div>
                         
                         <a 
                             href={`https://reddit.com${post.permalink}`}
                             target="_blank"
                             rel="noreferrer"
-                            className="flex items-center gap-1.5 text-xs font-medium text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 transition-colors"
+                            className="flex items-center gap-2 bg-stone-200/50 dark:bg-stone-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-stone-600 dark:text-stone-300 hover:text-emerald-700 dark:hover:text-emerald-400 px-3 py-1.5 rounded-full text-xs md:text-sm font-semibold transition-all"
                         >
+                            <span>Reddit</span>
                             <ExternalLink size={14} />
-                            Open on Reddit
                         </a>
                     </div>
                 </div>
