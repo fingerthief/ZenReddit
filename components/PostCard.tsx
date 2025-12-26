@@ -24,6 +24,10 @@ const decodeHtmlEntities = (str: string): string => {
             .replace(/&nbsp;/g, ' ');
 };
 
+const triggerHaptic = () => {
+    if (navigator.vibrate) navigator.vibrate(5);
+};
+
 const FlairBadge: React.FC<{ text: string; bgColor?: string; textColor?: 'dark' | 'light'; className?: string }> = ({ text, bgColor, textColor, className = '' }) => {
   if (!text) return null;
   
@@ -60,6 +64,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
   
   const handleShare = async (e: React.MouseEvent) => {
       e.stopPropagation();
+      triggerHaptic();
       const url = `https://www.reddit.com${post.permalink}`;
       
       if (navigator.share) {
@@ -84,6 +89,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
 
   const handleMediaClick = (e: React.MouseEvent) => {
       e.stopPropagation();
+      triggerHaptic();
 
       const isVideo = post.is_video || 
                       !!post.secure_media?.reddit_video || 
@@ -292,7 +298,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
       
       return (
         <div 
-           className={`zen-card bg-white dark:bg-stone-900 rounded-lg shadow-sm border border-stone-200 dark:border-stone-800 flex overflow-hidden w-full ${isSeen ? 'opacity-60' : ''}`}
+           className={`zen-card bg-white dark:bg-stone-900 rounded-lg shadow-sm border border-stone-200 dark:border-stone-800 flex overflow-hidden w-full ${isSeen ? 'opacity-60' : ''} touch-manipulation active:scale-[0.99] transition-transform`}
            onClick={() => onClick(post)}
         >
             {hasThumb && (
@@ -300,6 +306,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
                     className="w-[80px] min-h-[80px] sm:w-[110px] sm:min-h-[90px] shrink-0 bg-stone-100 dark:bg-stone-800 relative group overflow-hidden cursor-pointer"
                     onClick={(e) => { 
                         e.stopPropagation(); 
+                        triggerHaptic();
                         if (viewMode === 'compact') {
                             setIsExpanded(!isExpanded);
                         } else {
@@ -381,7 +388,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
                          </div>
                          <button 
                              onClick={handleShare}
-                             className="flex items-center gap-1 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
+                             className="flex items-center gap-1 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors p-2 -m-2"
                              title="Share"
                          >
                             {showCopied ? <Check size={12} className="text-emerald-500" /> : <Share2 size={12} className="stroke-[2.5px]" />}
@@ -396,8 +403,8 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
   // --- CARD VIEW ---
   return (
     <div 
-      className={`zen-card bg-white dark:bg-stone-900 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 mb-6 break-inside-avoid flex flex-col cursor-pointer w-full ${isSeen ? 'opacity-80' : ''}`}
-      onClick={() => onClick(post)}
+      className={`zen-card bg-white dark:bg-stone-900 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 mb-6 break-inside-avoid flex flex-col cursor-pointer w-full ${isSeen ? 'opacity-80' : ''} touch-manipulation`}
+      onClick={() => { triggerHaptic(); onClick(post); }}
     >
       <div className="p-4 flex flex-col h-full">
           {/* Header */}
@@ -474,7 +481,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
             
             <button 
                 onClick={handleShare}
-                className="flex items-center gap-1.5 hover:bg-stone-100 dark:hover:bg-stone-800 px-2 py-1 rounded-md transition-colors btn-press"
+                className="flex items-center gap-1.5 hover:bg-stone-100 dark:hover:bg-stone-800 px-2 py-1 rounded-md transition-colors btn-press active:bg-stone-200 dark:active:bg-stone-700"
                 title="Share"
             >
                 {showCopied ? <Check size={16} className="text-emerald-500" /> : <Share2 size={16} />}
@@ -490,8 +497,11 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
                     href={post.url} 
                     target="_blank" 
                     rel="noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex items-center gap-1 text-xs hover:underline text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        triggerHaptic();
+                    }}
+                    className="flex items-center gap-1 text-xs hover:underline text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors p-2 -m-2"
                  >
                      <span className="truncate max-w-[100px]">{post.domain}</span>
                      <ExternalLink size={10} />

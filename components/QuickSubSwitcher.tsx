@@ -9,6 +9,8 @@ interface QuickSubSwitcherProps {
   onFollow: (sub: string) => void;
   currentFeed: FeedType;
   currentSub?: string;
+  forceOpen?: boolean;
+  onClose?: () => void;
 }
 
 const QuickSubSwitcher: React.FC<QuickSubSwitcherProps> = ({
@@ -16,13 +18,19 @@ const QuickSubSwitcher: React.FC<QuickSubSwitcherProps> = ({
   onNavigate,
   onFollow,
   currentFeed,
-  currentSub
+  currentSub,
+  forceOpen = false,
+  onClose
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(forceOpen);
   const [filter, setFilter] = useState('');
   const [searchResults, setSearchResults] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (forceOpen) setIsOpen(true);
+  }, [forceOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -35,13 +43,18 @@ const QuickSubSwitcher: React.FC<QuickSubSwitcherProps> = ({
       setFilter('');
       setSearchResults([]);
       setIsSearching(false);
+      if (onClose) onClose();
     }
     return () => { document.body.style.overflow = ''; };
   }, [isOpen]);
 
+  const handleClose = () => {
+      setIsOpen(false);
+  };
+
   const handleSelect = (type: FeedType, sub?: string) => {
     onNavigate(type, sub);
-    setIsOpen(false);
+    handleClose();
   };
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -64,36 +77,38 @@ const QuickSubSwitcher: React.FC<QuickSubSwitcherProps> = ({
 
   return (
     <>
-      {/* FAB Trigger */}
-      <button
-        onClick={() => setIsOpen(true)}
-        className={`md:hidden fixed bottom-6 right-6 z-40 w-14 h-14 bg-emerald-600 text-white rounded-full shadow-lg shadow-emerald-900/20 flex items-center justify-center hover:bg-emerald-700 active:scale-95 transition-all duration-200 ${isOpen ? 'scale-0 opacity-0' : 'scale-100 opacity-100'}`}
-        aria-label="Quick Switch Subreddit"
-      >
-        <Layers size={24} />
-      </button>
+      {/* FAB Trigger - Only shown if NOT forced open (i.e. Desktop Mode) */}
+      {!forceOpen && (
+        <button
+            onClick={() => setIsOpen(true)}
+            className={`fixed bottom-6 right-6 z-40 w-14 h-14 bg-emerald-600 text-white rounded-full shadow-lg shadow-emerald-900/20 flex items-center justify-center hover:bg-emerald-700 active:scale-95 transition-all duration-200 ${isOpen ? 'scale-0 opacity-0' : 'scale-100 opacity-100'}`}
+            aria-label="Quick Switch Subreddit"
+        >
+            <Layers size={24} />
+        </button>
+      )}
 
       {/* Modal / Sheet */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 md:hidden flex flex-col justify-end">
+        <div className="fixed inset-0 z-[60] flex flex-col justify-end md:justify-center md:items-center">
             {/* Backdrop */}
             <div 
                 className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
-                onClick={() => setIsOpen(false)}
+                onClick={handleClose}
             />
             
             {/* Sheet Content */}
-            <div className="bg-white dark:bg-stone-900 w-full rounded-t-2xl shadow-2xl max-h-[85vh] flex flex-col animate-slide-up relative z-10 border-t border-stone-200 dark:border-stone-800">
-                {/* Drag Handle (Visual cue) */}
-                <div className="w-full flex justify-center pt-3 pb-1" onClick={() => setIsOpen(false)}>
+            <div className="bg-white dark:bg-stone-900 w-full md:w-[600px] md:rounded-2xl rounded-t-2xl shadow-2xl max-h-[85vh] md:max-h-[80vh] flex flex-col animate-slide-up relative z-10 border-t border-stone-200 dark:border-stone-800 md:border-none pb-safe">
+                {/* Drag Handle (Visual cue mobile only) */}
+                <div className="w-full flex justify-center pt-3 pb-1 md:hidden" onClick={handleClose}>
                     <div className="w-12 h-1.5 bg-stone-300 dark:bg-stone-700 rounded-full opacity-50"></div>
                 </div>
 
                 {/* Header */}
-                <div className="px-4 pb-4 flex items-center justify-between shrink-0">
-                    <h3 className="font-semibold text-lg text-stone-800 dark:text-stone-200">Quick Switch</h3>
+                <div className="px-4 pb-4 md:pt-4 flex items-center justify-between shrink-0">
+                    <h3 className="font-semibold text-lg text-stone-800 dark:text-stone-200">Explore & Search</h3>
                     <button 
-                        onClick={() => setIsOpen(false)}
+                        onClick={handleClose}
                         className="p-2 bg-stone-100 dark:bg-stone-800 rounded-full text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 transition-colors"
                     >
                         <X size={20} />
@@ -121,7 +136,7 @@ const QuickSubSwitcher: React.FC<QuickSubSwitcherProps> = ({
                 </div>
 
                 {/* Scrollable List */}
-                <div className="overflow-y-auto p-4 space-y-4 overscroll-contain pb-8 min-h-[40vh]">
+                <div className="overflow-y-auto p-4 space-y-4 overscroll-contain pb-8 min-h-[40vh] custom-scrollbar">
                     
                     {/* Search Results (Remote) */}
                     {searchResults.length > 0 && (
@@ -204,7 +219,7 @@ const QuickSubSwitcher: React.FC<QuickSubSwitcherProps> = ({
                                  <p className="text-stone-500 dark:text-stone-400 font-medium">
                                      {filter ? 'No followed subreddits match' : 'No followed subreddits'}
                                  </p>
-                                 {!filter && <p className="text-xs text-stone-400 mt-1">Search via sidebar to add some!</p>}
+                                 {!filter && <p className="text-xs text-stone-400 mt-1">Search via the top bar to add some!</p>}
                                  {filter && searchResults.length === 0 && !isSearching && (
                                      <button 
                                         onClick={handleSearch}

@@ -54,6 +54,10 @@ const decodeHtmlEntities = (str: string): string => {
             .replace(/&nbsp;/g, ' ');
 };
 
+const triggerHaptic = () => {
+    if (navigator.vibrate) navigator.vibrate(5);
+};
+
 const FlairBadge: React.FC<{ text: string; bgColor?: string; textColor?: 'dark' | 'light'; className?: string }> = ({ text, bgColor, textColor, className = '' }) => {
   if (!text) return null;
   
@@ -410,6 +414,7 @@ const CommentNode: React.FC<{
 
   const toggleCollapse = (e: React.MouseEvent) => {
     e.stopPropagation();
+    triggerHaptic();
     const newState = !collapsed;
     setCollapsed(newState);
     setGlobalCollapsed(data.id, newState); // Persist to context
@@ -855,11 +860,11 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
   const renderMedia = () => {
     if (post.secure_media?.reddit_video) {
         return (
-            <div className="relative mb-6 mx-auto w-full bg-black rounded-xl shadow-lg max-h-[60vh] group">
+            <div className="relative mb-6 mx-auto w-full bg-black md:rounded-xl shadow-lg max-h-[60vh] group">
                 <video 
                     ref={videoRef}
                     controls 
-                    className="w-full h-full object-contain max-h-[60vh] rounded-xl" 
+                    className="w-full h-full object-contain max-h-[60vh] md:rounded-xl" 
                     playsInline
                     poster={post.thumbnail && post.thumbnail.startsWith('http') ? post.thumbnail : undefined}
                 />
@@ -919,7 +924,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
         <img 
             src={post.url} 
             alt={post.title} 
-            className="w-full rounded-xl mb-6 object-contain max-h-[60vh] bg-stone-100 dark:bg-stone-900 shadow-sm cursor-zoom-in" 
+            className="w-full md:rounded-xl mb-6 object-contain max-h-[60vh] bg-stone-100 dark:bg-stone-900 shadow-sm cursor-zoom-in" 
             onClick={() => onImageClick([{ src: post.url, caption: post.title, id: post.id, type: 'image' }], 0)}
         />
       );
@@ -934,7 +939,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                  <img 
                     src={src} 
                     alt={post.title} 
-                    className="w-full rounded-xl object-contain max-h-[60vh] bg-stone-100 dark:bg-stone-900 shadow-sm cursor-zoom-in" 
+                    className="w-full md:rounded-xl object-contain max-h-[60vh] bg-stone-100 dark:bg-stone-900 shadow-sm cursor-zoom-in" 
                     onClick={() => onImageClick([{ src, caption: post.title, id: post.id, type: 'image' }], 0)}
                  />
                  {isImgurAlbum && (
@@ -954,7 +959,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
 
     if (post.url && !post.url.includes('reddit.com')) {
         return (
-            <a href={post.url} target="_blank" rel="noreferrer" className="flex items-center p-4 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl mb-6 text-blue-600 dark:text-blue-400 hover:bg-stone-100 dark:hover:bg-stone-750 transition-colors group">
+            <a href={post.url} target="_blank" rel="noreferrer" className="flex items-center p-4 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 md:rounded-xl mb-6 text-blue-600 dark:text-blue-400 hover:bg-stone-100 dark:hover:bg-stone-750 transition-colors group mx-4 md:mx-0">
                 <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg mr-3 group-hover:scale-110 transition-transform">
                      <ExternalLink className="shrink-0" size={20} />
                 </div>
@@ -981,7 +986,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
             onClick={(e) => e.stopPropagation()}
         >
             {/* Responsive Header */}
-            <div className="flex items-center justify-between px-3 md:px-4 py-3 border-b border-stone-200 dark:border-stone-800 bg-white/90 dark:bg-stone-950/90 backdrop-blur-md shrink-0 sticky top-0 z-20 h-16 md:h-auto">
+            <div className="flex items-center justify-between px-3 md:px-4 py-3 border-b border-stone-200 dark:border-stone-800 bg-white/90 dark:bg-stone-950/90 backdrop-blur-md shrink-0 sticky top-0 z-20 h-auto pt-safe md:pt-3">
                 <div className="flex items-center gap-3 overflow-hidden flex-1">
                     <button onClick={onClose} className="p-2 -ml-2 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-full transition-colors shrink-0 md:hidden btn-press">
                         <ChevronLeft size={24} className="text-stone-800 dark:text-stone-200" />
@@ -1022,9 +1027,9 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                 ref={scrollContainerRef}
                 className="flex-1 overflow-y-auto bg-white dark:bg-stone-950 relative"
             >
-            <div className="p-4 md:p-8 md:pb-20 max-w-5xl mx-auto">
+            <div className="md:p-8 md:pb-20 max-w-5xl mx-auto pb-safe">
                 {/* Post Title & Meta */}
-                <div className="mb-4 md:mb-6">
+                <div className="mb-4 md:mb-6 px-4 md:px-0 pt-4 md:pt-0">
                     <div className="flex flex-wrap items-center gap-2 mb-3">
                         {post.link_flair_text && (
                              <FlairBadge 
@@ -1059,13 +1064,13 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                     {renderMedia()}
                     
                     {post.selftext && (
-                        <div className="mb-6 p-4 md:p-5 bg-stone-50 dark:bg-stone-900/50 rounded-xl border border-stone-100 dark:border-stone-800">
+                        <div className="mb-6 p-4 md:p-5 bg-stone-50 dark:bg-stone-900/50 md:rounded-xl border-y md:border border-stone-100 dark:border-stone-800 -mx-4 md:mx-0">
                              <MarkdownRenderer content={decodeHtml(post.selftext)} onNavigateSub={onNavigateSub} textSize={textSize} />
                         </div>
                     )}
                     
                     {/* Responsive Stats Bar */}
-                    <div className="flex items-center justify-between gap-3 text-stone-500 dark:text-stone-400 border-y border-stone-100 dark:border-stone-800/50 py-3 mb-6 bg-stone-50/50 dark:bg-stone-900/30 rounded-lg px-3 md:px-4">
+                    <div className="flex items-center justify-between gap-3 text-stone-500 dark:text-stone-400 border-y border-stone-100 dark:border-stone-800/50 py-3 mb-6 bg-stone-50/50 dark:bg-stone-900/30 md:rounded-lg px-3 md:px-4 -mx-4 md:mx-0">
                         <div className="flex items-center gap-4 md:gap-6">
                             <div className="flex items-center gap-1.5 md:gap-2" title="Upvotes">
                                 <ArrowBigUp size={22} className={`${post.score > 0 ? 'text-orange-600 dark:text-orange-500' : ''}`} strokeWidth={2.5} />
@@ -1096,7 +1101,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                 </div>
 
                 {/* Comments Section */}
-                <div className="min-h-[300px]">
+                <div className="min-h-[300px] px-4 md:px-0">
                      {/* Comment Controls */}
                      <div className="flex items-center justify-between mb-4 sticky top-0 bg-white/95 dark:bg-stone-950/95 backdrop-blur-sm py-3 z-10 border-b border-stone-100 dark:border-stone-800/50">
                          <h3 className="font-bold text-lg text-stone-800 dark:text-stone-200">
@@ -1158,7 +1163,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
             </div>
 
             {/* Floating Navigation Controls */}
-            <div className="absolute bottom-6 right-6 z-30 flex flex-col gap-2 pointer-events-none">
+            <div className="absolute bottom-6 right-6 z-30 flex flex-col gap-2 pointer-events-none mb-safe md:mb-0">
                 <div className="bg-white dark:bg-stone-800 p-1 rounded-full shadow-xl border border-stone-200 dark:border-stone-700 flex flex-col gap-0.5 pointer-events-auto">
                     <button 
                         onClick={scrollToPrevParent} 

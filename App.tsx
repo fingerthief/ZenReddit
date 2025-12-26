@@ -9,10 +9,11 @@ import ScanningVisualizer from './components/ScanningVisualizer';
 import QuickSubSwitcher from './components/QuickSubSwitcher';
 import LazyRender from './components/LazyRender';
 import SubredditHeader from './components/SubredditHeader';
+import MobileBottomNav from './components/MobileBottomNav';
 import { FeedType, FilteredPost, RedditPostData, AIConfig, SortOption, TopTimeOption, CachedAnalysis, GalleryItem, ViewMode } from './types';
 import { fetchFeed } from './services/redditService';
 import { analyzePostsForZen, AnalysisResult } from './services/aiService';
-import { Loader2, RefreshCw, Menu, CloudOff, TriangleAlert, Search, ChevronDown, LayoutGrid, List, X } from 'lucide-react';
+import { Loader2, RefreshCw, CloudOff, TriangleAlert, Search, ChevronDown, LayoutGrid, List, X, Flame } from 'lucide-react';
 
 const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
   try {
@@ -21,8 +22,6 @@ const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
     try {
       return JSON.parse(saved);
     } catch (e) {
-      // If we can't parse it, it might be a raw string saved by older version.
-      // If defaultValue is a string, try returning the raw value
       if (typeof defaultValue === 'string') {
           return saved as unknown as T;
       }
@@ -144,9 +143,12 @@ const App: React.FC = () => {
   }));
   
   // UI State
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [mobileExploreOpen, setMobileExploreOpen] = useState(false);
   
+  // Mobile Bottom Nav State
+  const [mobileActiveTab, setMobileActiveTab] = useState<'home' | 'explore' | 'settings'>('home');
+
   // Refs
   const observerTarget = useRef<HTMLDivElement>(null);
   const mainScrollRef = useRef<HTMLDivElement>(null);
@@ -157,6 +159,7 @@ const App: React.FC = () => {
   const isAtTopRef = useRef(false);
   const [pullY, setPullY] = useState(0);
   const [isPulling, setIsPulling] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
 
   // --- Effects for Persistence ---
   useEffect(() => {
@@ -174,7 +177,7 @@ const App: React.FC = () => {
     localStorage.setItem('zen_top_time', JSON.stringify(currentTopTime));
     localStorage.setItem('zen_page_size', JSON.stringify(pageSize));
     localStorage.setItem('zen_text_size', JSON.stringify(textSize));
-    localStorage.setItem('zen_view_mode', JSON.stringify(viewMode)); // Fixed: stringify enum/string
+    localStorage.setItem('zen_view_mode', JSON.stringify(viewMode));
     localStorage.setItem('zen_followed_subs', JSON.stringify(followedSubs));
     localStorage.setItem('zen_ai_config', JSON.stringify(aiConfig));
     localStorage.setItem('zen_blocked_count', JSON.stringify(blockedCount));
@@ -197,9 +200,7 @@ const App: React.FC = () => {
             const now = Date.now();
             const expiry = 7 * 24 * 60 * 60 * 1000;
             const cleaned: Record<string, CachedAnalysis> = {};
-            // Basic pruning of cache
             const entries = Object.entries(analysisCache) as [string, CachedAnalysis][];
-            // Limit cache size to 500 items to prevent storage overflow
             const startIndex = Math.max(0, entries.length - 500);
             
             for (let i = startIndex; i < entries.length; i++) {
@@ -223,7 +224,6 @@ const App: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [selectedPost, viewingGallery]);
 
-  // Sync search input with currentSearchQuery
   useEffect(() => {
     if (currentFeed === 'search') {
       setSearchInput(currentSearchQuery);
@@ -232,10 +232,20 @@ const App: React.FC = () => {
     }
   }, [currentSearchQuery, currentFeed]);
 
-  // Reset search restricted state when changing subs
   useEffect(() => {
       setSearchRestricted(true);
   }, [currentSub]);
+
+  // Scroll Listener
+  useEffect(() => {
+      const scrollEl = mainScrollRef.current;
+      if (!scrollEl) return;
+      const handleScroll = () => {
+          setIsScrolled(scrollEl.scrollTop > 100);
+      };
+      scrollEl.addEventListener('scroll', handleScroll);
+      return () => scrollEl.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // --- Handlers ---
   const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
@@ -279,11 +289,10 @@ const App: React.FC = () => {
 
   const handleNavigate = (type: FeedType, sub?: string, query?: string) => {
     if (type === currentFeed && sub === currentSub && query === currentSearchQuery) {
-        setMobileMenuOpen(false);
+        setMobileExploreOpen(false);
         return;
     }
     
-    // Abort any ongoing fetches immediately
     if (abortControllerRef.current) {
         abortControllerRef.current.abort();
     }
@@ -296,9 +305,12 @@ const App: React.FC = () => {
     } else if (type !== 'search') {
         setCurrentSearchQuery('');
     }
-    setMobileMenuOpen(false);
+    
+    // UI Resets
+    setMobileExploreOpen(false);
     if (selectedPost) setSelectedPost(null);
     setViewingGallery(null);
+    setMobileActiveTab('home');
     
     // Scroll back to top on navigate
     if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
@@ -313,7 +325,7 @@ const App: React.FC = () => {
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
-      if (viewingGallery || selectedPost || settingsOpen) return;
+      if (viewingGallery || selectedPost || settingsOpen || mobileExploreOpen) return;
       touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       if (mainScrollRef.current) {
           isAtTopRef.current = mainScrollRef.current.scrollTop <= 1;
@@ -322,7 +334,7 @@ const App: React.FC = () => {
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchStartRef.current || viewingGallery || selectedPost || settingsOpen) return;
+    if (!touchStartRef.current || viewingGallery || selectedPost || settingsOpen || mobileExploreOpen) return;
     const currentY = e.touches[0].clientY;
     const dy = currentY - touchStartRef.current.y;
     const dx = e.touches[0].clientX - touchStartRef.current.x;
@@ -346,7 +358,6 @@ const App: React.FC = () => {
       if (pullY > 60) { 
           setPullY(60); 
           setIsRefreshing(true);
-          // Pass true to skipCache to force a network refresh
           loadPosts(false, true).finally(() => {
               setIsRefreshing(false);
               setPullY(0);
@@ -356,7 +367,7 @@ const App: React.FC = () => {
       }
 
       // Swipe back navigation
-      if (pullY < 10 && startX < 40 && !viewingGallery && !selectedPost && !settingsOpen) {
+      if (pullY < 10 && startX < 40 && !viewingGallery && !selectedPost && !settingsOpen && !mobileExploreOpen) {
           const dx = endX - startX;
           const dy = Math.abs(endY - startY);
           if (dx > 80 && dy < 60 && navHistory.length > 0) {
@@ -372,10 +383,8 @@ const App: React.FC = () => {
   const handlePostNavigateSub = (sub: string) => handleNavigate('subreddit', sub);
 
   const loadPosts = useCallback(async (isLoadMore = false, forceRefresh = false) => {
-    // If loading or analyzing, allow refresh (isLoadMore=false), but block duplicate loadMore
     if ((loading || analyzing) && isLoadMore) return;
     
-    // Cancel previous request if starting a new feed load
     if (!isLoadMore) {
         if (abortControllerRef.current) abortControllerRef.current.abort();
         abortControllerRef.current = new AbortController();
@@ -390,7 +399,6 @@ const App: React.FC = () => {
     }
 
     try {
-      // Small delay to allow UI to update if switching feeds rapidly
       if (!isLoadMore) await new Promise(resolve => setTimeout(resolve, 50));
       
       if (abortControllerRef.current?.signal.aborted) return;
@@ -404,7 +412,7 @@ const App: React.FC = () => {
         currentSort,
         currentTopTime,
         pageSize,
-        forceRefresh // Pass skipCache param
+        forceRefresh
       );
       
       if (abortControllerRef.current?.signal.aborted) return;
@@ -433,7 +441,6 @@ const App: React.FC = () => {
 
       if (postsToAnalyze.length > 0) {
           try {
-             // Only analyze if we have an API key, otherwise fallback happens inside service
              newAnalysisResults = await analyzePostsForZen(postsToAnalyze, aiConfig);
              
              if (abortControllerRef.current?.signal.aborted) return;
@@ -474,7 +481,6 @@ const App: React.FC = () => {
     }
   }, [loading, analyzing, currentFeed, currentSub, after, followedSubs, currentSearchQuery, currentSort, currentTopTime, pageSize, analysisCache, aiConfig, isRefreshing]);
 
-  // Initial Load & Config Change Reload
   useEffect(() => {
       loadPosts(false);
       return () => {
@@ -482,7 +488,6 @@ const App: React.FC = () => {
       };
   }, [currentFeed, currentSub, currentSearchQuery, currentSort, currentTopTime, pageSize, aiConfig.provider, aiConfig.openRouterModel, aiConfig.customInstructions, followedSubs]); 
 
-  // Infinite Scroll Observer
   useEffect(() => {
       if (!observerTarget.current || loading || analyzing || !after) return;
       
@@ -499,6 +504,23 @@ const App: React.FC = () => {
       return () => observer.disconnect();
   }, [observerTarget, loading, analyzing, after, loadPosts]);
 
+  // Mobile Bottom Nav Handler
+  const handleMobileTabChange = (tab: 'home' | 'explore' | 'settings') => {
+      setMobileActiveTab(tab);
+      if (tab === 'home') {
+          // If already on feed but scrolled, MobileBottomNav handles scroll top
+          // If on different feed, maybe reset? No, stay on current feed.
+      } else if (tab === 'explore') {
+          setMobileExploreOpen(true);
+      } else if (tab === 'settings') {
+          setSettingsOpen(true);
+      }
+  };
+
+  const scrollToTop = () => {
+      mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <div 
         className="flex bg-stone-100 dark:bg-stone-950 h-screen w-full overflow-hidden font-sans text-stone-900 dark:text-stone-100 transition-colors" 
@@ -506,36 +528,23 @@ const App: React.FC = () => {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
     >
-      {/* Mobile Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-white/90 dark:bg-stone-900/90 backdrop-blur-md border-b border-stone-200 dark:border-stone-800 z-40 flex items-center justify-between px-4 transition-all duration-300">
-        <button onClick={() => setMobileMenuOpen(true)} className="p-2 -ml-2 text-stone-600 dark:text-stone-300 btn-press rounded-full">
-           <Menu size={24} />
-        </button>
-        <span className="font-semibold text-lg bg-clip-text text-transparent bg-gradient-to-r from-emerald-600 to-teal-500">ZenReddit</span>
-        <div className="w-8"></div>
-      </div>
-
-      {/* Mobile Sidebar Drawer */}
-      {mobileMenuOpen && (
-          <div className="fixed inset-0 z-50 md:hidden">
-              <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setMobileMenuOpen(false)}></div>
-              <div className="absolute top-0 left-0 bottom-0 w-72 bg-white dark:bg-stone-900 shadow-2xl animate-modal-spring origin-left">
-                  <Sidebar 
-                    currentFeed={currentFeed}
-                    currentSub={currentSub}
-                    onNavigate={handleNavigate}
-                    followedSubs={followedSubs}
-                    onFollow={handleFollow}
-                    onUnfollow={handleUnfollow}
-                    theme={theme}
-                    toggleTheme={toggleTheme}
-                    blockedCount={blockedCount}
-                    blockedCommentCount={blockedCommentCount}
-                    onOpenSettings={() => { setSettingsOpen(true); setMobileMenuOpen(false); }}
-                  />
-              </div>
+      {/* Mobile Top Bar - Clean & Minimal */}
+      <div className="md:hidden fixed top-0 left-0 right-0 h-auto pt-safe pb-2 px-4 bg-stone-100/90 dark:bg-stone-950/90 backdrop-blur-md z-40 transition-transform duration-300">
+          <div className="flex items-center justify-between h-10">
+            <span className="font-semibold text-lg bg-clip-text text-transparent bg-gradient-to-r from-emerald-600 to-teal-500 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)] animate-pulse"></span>
+                ZenReddit
+            </span>
+            <div className="flex items-center gap-2">
+                 <button 
+                    onClick={() => setViewMode(viewMode === 'card' ? 'compact' : 'card')}
+                    className="p-2 rounded-full text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-800 transition-colors"
+                >
+                    {viewMode === 'card' ? <List size={20} /> : <LayoutGrid size={20} />}
+                </button>
+            </div>
           </div>
-      )}
+      </div>
 
       {/* Desktop Sidebar */}
       <div className="hidden md:flex shrink-0 h-full w-64 z-20 shadow-lg">
@@ -555,7 +564,7 @@ const App: React.FC = () => {
       </div>
 
       {/* Pull to Refresh Indicator */}
-      <div className="fixed top-20 left-0 right-0 md:left-64 z-0 flex justify-center pointer-events-none">
+      <div className="fixed top-24 left-0 right-0 md:left-64 z-0 flex justify-center pointer-events-none">
          <div 
              className="bg-white dark:bg-stone-800 p-2.5 rounded-full shadow-lg border border-stone-200 dark:border-stone-700 flex items-center justify-center transition-all duration-200 ease-out"
              style={{ 
@@ -576,24 +585,20 @@ const App: React.FC = () => {
       <main 
         id="main-scroll"
         ref={mainScrollRef}
-        className="flex-1 h-full overflow-y-auto w-full relative z-10 bg-stone-100 dark:bg-stone-950 scroll-smooth"
+        className="flex-1 h-full overflow-y-auto w-full relative z-10 bg-stone-100 dark:bg-stone-950 scroll-smooth pb-16 md:pb-0"
         style={{ 
             transform: `translateY(${pullY}px)`, 
             transition: isPulling ? 'none' : 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)' 
         }}
       >
-         <div className="max-w-[1800px] mx-auto px-4 pt-16 md:pt-8 md:px-6 pb-8">
-            {/* Search Bar */}
-            <form onSubmit={handleSearchSubmit} className="relative mb-6 group max-w-3xl mx-auto transform transition-all duration-300 hover:scale-[1.01]">
-                {/* Search Container - using Flexbox for layout */}
+         <div className="max-w-[1800px] mx-auto px-2 pt-20 md:pt-8 md:px-6 pb-20 md:pb-8">
+            {/* Search Bar (Desktop Only) */}
+            <form onSubmit={handleSearchSubmit} className="hidden md:block relative mb-6 group max-w-3xl mx-auto transform transition-all duration-300 hover:scale-[1.01]">
                 <div className="relative flex items-center w-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl shadow-sm group-focus-within:shadow-md focus-within:ring-2 focus-within:ring-emerald-500/30 focus-within:border-emerald-500 transition-all overflow-hidden">
-                    
-                    {/* Search Icon */}
                     <div className="pl-4 pr-2 flex items-center pointer-events-none shrink-0">
                         <Search className="h-5 w-5 text-stone-400 group-focus-within:text-emerald-500 transition-colors duration-300" />
                     </div>
                     
-                    {/* Context Pill (Subreddit Label) */}
                     {currentSub && searchRestricted && (
                         <div className="flex items-center gap-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-md text-sm font-medium animate-fade-in whitespace-nowrap border border-emerald-200 dark:border-emerald-800/50 mr-1 shrink-0 max-w-[120px] sm:max-w-[200px]">
                             <span className="truncate">r/{currentSub}</span>
@@ -607,7 +612,6 @@ const App: React.FC = () => {
                         </div>
                     )}
                     
-                    {/* Search Input */}
                     <input
                         type="text"
                         value={searchInput}
@@ -633,14 +637,14 @@ const App: React.FC = () => {
             )}
 
             {/* Toolbar */}
-            <div className="flex items-center justify-between gap-4 mb-6 max-w-3xl mx-auto xl:max-w-none">
+            <div className="flex items-center justify-between gap-4 mb-4 md:mb-6 max-w-3xl mx-auto xl:max-w-none pl-1">
                 <div className="flex-1 min-w-0 flex items-center gap-2 overflow-x-auto pb-2 hide-scrollbar">
                     {/* Sort Buttons */}
                     {(['hot', 'new', 'top', 'rising'] as SortOption[]).map((option) => (
                         <button
                         key={option}
                         onClick={() => setCurrentSort(option)}
-                        className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 capitalize whitespace-nowrap btn-press shrink-0 ${
+                        className={`px-3 md:px-4 py-1.5 md:py-2 rounded-full text-xs md:text-sm font-medium transition-all duration-300 capitalize whitespace-nowrap btn-press shrink-0 ${
                             currentSort === option 
                             ? 'bg-stone-800 text-white dark:bg-stone-100 dark:text-stone-900 shadow-md transform scale-105' 
                             : 'bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-400 border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800'
@@ -656,7 +660,7 @@ const App: React.FC = () => {
                         <select 
                             value={currentTopTime} 
                             onChange={(e) => setCurrentTopTime(e.target.value as TopTimeOption)}
-                            className="appearance-none bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-full pl-4 pr-9 py-2 text-sm font-medium text-stone-700 dark:text-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors"
+                            className="appearance-none bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-full pl-4 pr-8 py-1.5 md:py-2 text-xs md:text-sm font-medium text-stone-700 dark:text-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors"
                         >
                             <option value="hour">Now</option>
                             <option value="day">Today</option>
@@ -670,8 +674,7 @@ const App: React.FC = () => {
                     )}
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                    {/* View Mode Toggle */}
+                <div className="hidden md:flex items-center gap-2 shrink-0">
                     <div className="flex bg-white dark:bg-stone-900 rounded-lg border border-stone-200 dark:border-stone-800 p-1 shrink-0 shadow-sm">
                         <button 
                             onClick={() => setViewMode('card')}
@@ -702,7 +705,6 @@ const App: React.FC = () => {
             {/* Content Area */}
             {loading && posts.length === 0 ? (
                 <div className={viewMode === 'card' ? "columns-1 md:columns-2 xl:columns-3 gap-6" : "flex flex-col gap-3 max-w-4xl mx-auto"}>
-                    {/* Memoized skeletons array */}
                     {[1,2,3,4,5,6].map(i => <PostSkeleton key={i} viewMode={viewMode} />)}
                 </div>
             ) : error ? (
@@ -758,14 +760,42 @@ const App: React.FC = () => {
          </div>
       </main>
 
-      {/* Floating Action Button for Mobile Subreddit Switching */}
-      <QuickSubSwitcher 
-        followedSubs={followedSubs}
-        onNavigate={handleNavigate}
-        onFollow={handleFollow}
-        currentFeed={currentFeed}
-        currentSub={currentSub}
+      {/* Mobile Bottom Navigation */}
+      <MobileBottomNav 
+        activeTab={mobileActiveTab}
+        onTabChange={handleMobileTabChange}
+        onScrollTop={scrollToTop}
+        isScrolled={isScrolled}
       />
+
+      {/* Mobile Explore/Sub Switcher (Triggered by Explore Tab) */}
+      {mobileExploreOpen && (
+          <div className="md:hidden">
+              <QuickSubSwitcher 
+                followedSubs={followedSubs}
+                onNavigate={handleNavigate}
+                onFollow={handleFollow}
+                currentFeed={currentFeed}
+                currentSub={currentSub}
+                forceOpen={true}
+                onClose={() => {
+                    setMobileExploreOpen(false);
+                    setMobileActiveTab('home');
+                }}
+              />
+          </div>
+      )}
+      
+      {/* Desktop Quick Switcher FAB (Hidden on Mobile now) */}
+      <div className="hidden md:block">
+        <QuickSubSwitcher 
+            followedSubs={followedSubs}
+            onNavigate={handleNavigate}
+            onFollow={handleFollow}
+            currentFeed={currentFeed}
+            currentSub={currentSub}
+        />
+      </div>
 
       {/* Modals */}
       {selectedPost && (
@@ -790,7 +820,10 @@ const App: React.FC = () => {
 
       <SettingsModal 
         isOpen={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+        onClose={() => {
+            setSettingsOpen(false);
+            setMobileActiveTab('home');
+        }}
         config={aiConfig}
         onSave={handleSaveSettings}
         pageSize={pageSize}
