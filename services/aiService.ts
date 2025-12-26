@@ -1,5 +1,5 @@
-
 import { RedditPostData, AIConfig, RedditComment, CommentAnalysis } from "../types";
+import { GoogleGenAI } from "@google/genai";
 
 export interface AnalysisResult {
   id: string;
@@ -13,11 +13,10 @@ const cleanJsonString = (str: string) => {
     return str.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
 };
 
+const PROMPT_MODEL_ID = 'gemini-2.0-flash-lite-preview-02-05';
+
 export const analyzePostsForZen = async (posts: RedditPostData[], config?: AIConfig): Promise<AnalysisResult[]> => {
   if (posts.length === 0) return [];
-
-  const apiKey = config?.openRouterKey || process.env.API_KEY;
-  if (!apiKey) return fallbackResult(posts);
 
   // Minimized payload
   const postsPayload = posts.map(p => ({
@@ -28,12 +27,9 @@ export const analyzePostsForZen = async (posts: RedditPostData[], config?: AICon
   }));
 
   const threshold = config?.minZenScore ?? 50;
-  const model = config?.openRouterModel || 'meta-llama/llama-3-8b-instruct:free';
-  
   const customPrompt = config?.customInstructions ? 
     `USER PREF: "${config.customInstructions}".` : "";
 
-  // Highly optimized prompt to save tokens
   const systemPrompt = `
     Task: Filter Reddit posts for a "Zen" feed.
     Filter out: Rage bait, divisive politics, aggression, anxiety-inducing content.
@@ -46,7 +42,64 @@ export const analyzePostsForZen = async (posts: RedditPostData[], config?: AICon
     - isRageBait: boolean (true if zenScore < ${threshold})
   `;
 
-  try {
+  // Logic: Use OpenRouter IF key is explicitly provided in config.
+  // Otherwise, use process.env.API_KEY as a Google GenAI key.
+  
+  if (config?.openRouterKey) {
+     return analyzeWithOpenRouter(postsPayload, systemPrompt, config.openRouterKey, config.openRouterModel, threshold);
+  } else if (process.env.API_KEY) {
+     return analyzeWithGoogleGenAI(postsPayload, systemPrompt, process.env.API_KEY, threshold);
+  } else {
+     return fallbackResult(posts);
+  }
+};
+
+const analyzeWithGoogleGenAI = async (
+    payload: any, 
+    systemPrompt: string, 
+    apiKey: string,
+    threshold: number
+): Promise<AnalysisResult[]> => {
+    try {
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await ai.models.generateContent({
+            model: PROMPT_MODEL_ID,
+            contents: JSON.stringify(payload),
+            config: {
+                systemInstruction: systemPrompt,
+                responseMimeType: 'application/json'
+            }
+        });
+
+        const text = response.text;
+        if (!text) throw new Error("No text returned from Gemini");
+        
+        const parsed = JSON.parse(text);
+        const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.data);
+        
+        if (!Array.isArray(results)) throw new Error("Invalid structure from Gemini");
+
+        return results.map((r: any) => ({
+            id: r.id,
+            isRageBait: typeof r.isRageBait === 'boolean' ? r.isRageBait : (r.zenScore < threshold),
+            zenScore: typeof r.zenScore === 'number' ? r.zenScore : 50,
+            reason: r.reason || "AI analysis"
+        }));
+
+    } catch (error) {
+        console.error("Gemini Analysis Failed:", error);
+        return fallbackResult(payload);
+    }
+}
+
+const analyzeWithOpenRouter = async (
+    payload: any, 
+    systemPrompt: string, 
+    apiKey: string, 
+    model: string | undefined, 
+    threshold: number
+): Promise<AnalysisResult[]> => {
+    try {
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -56,10 +109,10 @@ export const analyzePostsForZen = async (posts: RedditPostData[], config?: AICon
           "X-Title": "ZenReddit"
         },
         body: JSON.stringify({
-          model: model,
+          model: model || 'meta-llama/llama-3-8b-instruct:free',
           messages: [
             { role: "system", content: systemPrompt },
-            { role: "user", content: JSON.stringify(postsPayload) }
+            { role: "user", content: JSON.stringify(payload) }
           ],
           response_format: { type: "json_object" } 
         })
@@ -77,12 +130,12 @@ export const analyzePostsForZen = async (posts: RedditPostData[], config?: AICon
           parsed = JSON.parse(cleanJsonString(content));
       } catch (e) {
           console.warn("Invalid JSON from AI", content);
-          return fallbackResult(posts);
+          return fallbackResult(payload);
       }
 
       const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.data);
 
-      if (!Array.isArray(results)) return fallbackResult(posts);
+      if (!Array.isArray(results)) return fallbackResult(payload);
 
       return results.map((r: any) => ({
           id: r.id,
@@ -92,12 +145,12 @@ export const analyzePostsForZen = async (posts: RedditPostData[], config?: AICon
       }));
 
   } catch (error) {
-      console.error("AI Analysis Failed:", error);
-      return fallbackResult(posts);
+      console.error("OpenRouter Analysis Failed:", error);
+      return fallbackResult(payload);
   }
-};
+}
 
-const fallbackResult = (posts: RedditPostData[]): AnalysisResult[] => {
+const fallbackResult = (posts: any[]): AnalysisResult[] => {
     return posts.map(p => ({
         id: p.id,
         isRageBait: false,
@@ -113,22 +166,16 @@ export const analyzeCommentsForZen = async (
   config?: AIConfig,
   context?: { title: string; subreddit: string; selftext?: string }
 ): Promise<CommentAnalysis[]> => {
-  const apiKey = config?.openRouterKey || process.env.API_KEY;
-  if (!apiKey || comments.length === 0) return [];
+  if (comments.length === 0) return [];
 
-  // Limit payload: Top 10-15 comments
-  // Enhanced to include 'replies_context' to see how the conversation evolved
   const payload = comments.slice(0, 15).map(c => {
     let repliesContext: string[] = [];
-    
-    // Extract immediate reply snippets to provide conversation chain context
     if (c.data.replies && typeof c.data.replies !== 'string' && c.data.replies.data) {
         repliesContext = c.data.replies.data.children
             .filter((child: any) => child.kind === 't1')
-            .slice(0, 3) // Check first 3 replies to gauge reaction
+            .slice(0, 3) 
             .map((child: any) => `[${child.data.author}]: ${child.data.body.substring(0, 60)}`);
     }
-
     return {
       id: c.data.id,
       author: c.data.author,
@@ -136,8 +183,6 @@ export const analyzeCommentsForZen = async (
       replies_context: repliesContext
     };
   });
-
-  const model = config?.openRouterModel || 'meta-llama/llama-3-8b-instruct:free';
 
   const contextStr = context ? `
     SUBREDDIT: r/${context.subreddit}
@@ -163,44 +208,80 @@ export const analyzeCommentsForZen = async (
     Return JSON: { "results": [{ "id": "string", "isToxic": boolean, "reason": "short string explanation" }] }
   `;
 
-  try {
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": window.location.origin, 
-          "X-Title": "ZenReddit"
-        },
-        body: JSON.stringify({
-          model: model,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: JSON.stringify(payload) }
-          ],
-          response_format: { type: "json_object" } 
-        })
-      });
+  if (config?.openRouterKey) {
+      // Use OpenRouter
+      try {
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+            "Authorization": `Bearer ${config.openRouterKey}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": window.location.origin, 
+            "X-Title": "ZenReddit"
+            },
+            body: JSON.stringify({
+            model: config.openRouterModel || 'meta-llama/llama-3-8b-instruct:free',
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: JSON.stringify(payload) }
+            ],
+            response_format: { type: "json_object" } 
+            })
+        });
 
-      if (!response.ok) return [];
+        if (!response.ok) return [];
 
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content;
-      if (!content) return [];
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content;
+        if (!content) return [];
 
-      const parsed = JSON.parse(cleanJsonString(content));
-      const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.data);
-      
-      if (Array.isArray(results)) {
-          return results.map((r: any) => ({
-              id: r.id,
-              isToxic: !!r.isToxic,
-              reason: r.reason
-          }));
+        const parsed = JSON.parse(cleanJsonString(content));
+        const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.data);
+        
+        if (Array.isArray(results)) {
+            return results.map((r: any) => ({
+                id: r.id,
+                isToxic: !!r.isToxic,
+                reason: r.reason
+            }));
+        }
+        return [];
+    } catch (e) {
+        console.warn("OpenRouter Comment analysis error", e);
+        return [];
+    }
+  } else if (process.env.API_KEY) {
+      // Use Google GenAI
+      try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const response = await ai.models.generateContent({
+            model: PROMPT_MODEL_ID,
+            contents: JSON.stringify(payload),
+            config: {
+                systemInstruction: systemPrompt,
+                responseMimeType: 'application/json'
+            }
+        });
+
+        const text = response.text;
+        if (!text) return [];
+        
+        const parsed = JSON.parse(text);
+        const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.data);
+        
+        if (Array.isArray(results)) {
+            return results.map((r: any) => ({
+                id: r.id,
+                isToxic: !!r.isToxic,
+                reason: r.reason
+            }));
+        }
+        return [];
+      } catch (e) {
+          console.warn("Gemini Comment analysis error", e);
+          return [];
       }
-      return [];
-  } catch (e) {
-      console.warn("Comment analysis error", e);
-      return [];
   }
+
+  return [];
 };

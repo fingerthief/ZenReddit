@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import PostCard from './components/PostCard';
@@ -16,7 +17,17 @@ import { Loader2, RefreshCw, Menu, CloudOff, TriangleAlert, Search, ChevronDown,
 const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
   try {
     const saved = localStorage.getItem(key);
-    return saved ? JSON.parse(saved) : defaultValue;
+    if (!saved) return defaultValue;
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      // If we can't parse it, it might be a raw string saved by older version.
+      // If defaultValue is a string, try returning the raw value
+      if (typeof defaultValue === 'string') {
+          return saved as unknown as T;
+      }
+      return defaultValue;
+    }
   } catch (e) {
     console.warn(`Failed to load ${key} from storage`, e);
     return defaultValue;
@@ -163,11 +174,11 @@ const App: React.FC = () => {
     localStorage.setItem('zen_top_time', JSON.stringify(currentTopTime));
     localStorage.setItem('zen_page_size', JSON.stringify(pageSize));
     localStorage.setItem('zen_text_size', JSON.stringify(textSize));
-    localStorage.setItem('zen_view_mode', viewMode);
+    localStorage.setItem('zen_view_mode', JSON.stringify(viewMode)); // Fixed: stringify enum/string
     localStorage.setItem('zen_followed_subs', JSON.stringify(followedSubs));
     localStorage.setItem('zen_ai_config', JSON.stringify(aiConfig));
-    localStorage.setItem('zen_blocked_count', blockedCount.toString());
-    localStorage.setItem('zen_blocked_comment_count', blockedCommentCount.toString());
+    localStorage.setItem('zen_blocked_count', JSON.stringify(blockedCount));
+    localStorage.setItem('zen_blocked_comment_count', JSON.stringify(blockedCommentCount));
   }, [currentFeed, currentSub, currentSearchQuery, currentSort, currentTopTime, pageSize, textSize, viewMode, followedSubs, aiConfig, blockedCount, blockedCommentCount]);
 
   // Debounced save for expensive objects (seenPosts, analysisCache)
@@ -763,6 +774,7 @@ const App: React.FC = () => {
             textSize={textSize}
             aiConfig={aiConfig}
             onCommentsBlocked={handleCommentsBlocked}
+            onImageClick={handleGalleryClick}
           />
       )}
 

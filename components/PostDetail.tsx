@@ -1,9 +1,9 @@
 
 import React, { useEffect, useState, useRef, useMemo, memo, useContext, useCallback } from 'react';
-import { FilteredPost, RedditComment, RedditListing, CommentAnalysis, AIConfig, RedditMore } from '../types';
+import { FilteredPost, RedditComment, RedditListing, CommentAnalysis, AIConfig, RedditMore, GalleryItem } from '../types';
 import { fetchComments, fetchMoreChildren } from '../services/redditService';
 import { analyzeCommentsForZen } from '../services/aiService';
-import { X, ExternalLink, Loader2, ArrowBigUp, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MessageSquare, Images, Plus, MoreHorizontal, ShieldAlert, Eye, Captions, CornerDownRight } from 'lucide-react';
+import { X, ExternalLink, Loader2, ArrowBigUp, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MessageSquare, Images, Plus, MoreHorizontal, ShieldAlert, Eye, Captions, CornerDownRight, Maximize2 } from 'lucide-react';
 import Hls from 'hls.js';
 import { formatDistanceToNow } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
@@ -18,6 +18,7 @@ interface PostDetailProps {
   textSize: 'small' | 'medium' | 'large';
   aiConfig: AIConfig;
   onCommentsBlocked: (count: number) => void;
+  onImageClick: (items: GalleryItem[], initialIndex: number) => void;
 }
 
 // Context to persist comment state (like collapsed status) even when virtualized (unmounted)
@@ -169,7 +170,10 @@ const MarkdownRenderer: React.FC<{ content: string; onNavigateSub?: (sub: string
 });
 
 // Gallery Component
-const GalleryViewer: React.FC<{ items: { src: string; caption?: string; id: string | number }[] }> = ({ items }) => {
+const GalleryViewer: React.FC<{ 
+  items: { src: string; caption?: string; id: string | number }[],
+  onImageClick?: (index: number) => void
+}> = ({ items, onImageClick }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [dragOffset, setDragOffset] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -246,9 +250,10 @@ const GalleryViewer: React.FC<{ items: { src: string; caption?: string; id: stri
                          <img 
                             src={item.src} 
                             alt={item.caption || `Image ${index + 1}`}
-                            className="max-h-[70vh] w-full object-contain"
+                            className="max-h-[70vh] w-full object-contain cursor-zoom-in"
                             loading={Math.abs(index - currentIndex) <= 1 ? "eager" : "lazy"}
                             draggable={false}
+                            onClick={() => onImageClick && onImageClick(index)}
                         />
                     </div>
                 ))}
@@ -282,7 +287,7 @@ const GalleryViewer: React.FC<{ items: { src: string; caption?: string; id: stri
         </div>
         
         {/* Image Counter Badge */}
-        <div className="absolute top-3 right-3 bg-black/60 text-white px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-sm flex items-center gap-1.5 shadow-sm">
+        <div className="absolute top-3 right-3 bg-black/60 text-white px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-sm flex items-center gap-1.5 shadow-sm pointer-events-none">
             <Images size={12} />
             {currentIndex + 1} / {items.length}
         </div>
@@ -615,7 +620,7 @@ const CommentNode: React.FC<{
   );
 });
 
-const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, textSize, aiConfig, onCommentsBlocked }) => {
+const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, textSize, aiConfig, onCommentsBlocked, onImageClick }) => {
   const [comments, setComments] = useState<(RedditComment | RedditMore)[]>([]);
   const [loading, setLoading] = useState(true);
   const [analyzingComments, setAnalyzingComments] = useState(false);
@@ -797,6 +802,21 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
       }
   };
 
+  const getVideoItem = (): GalleryItem | null => {
+      const video = post.secure_media?.reddit_video;
+      if (!video) return null;
+      return {
+          src: post.thumbnail && post.thumbnail.startsWith('http') ? post.thumbnail : '',
+          caption: post.title,
+          id: post.id,
+          type: 'video',
+          videoSources: {
+              hls: video.hls_url,
+              mp4: video.fallback_url
+          }
+      };
+  };
+
   // Render logic for post media...
   const renderMedia = () => {
     if (post.secure_media?.reddit_video) {
@@ -810,6 +830,20 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                     poster={post.thumbnail && post.thumbnail.startsWith('http') ? post.thumbnail : undefined}
                 />
                 
+                {/* Fullscreen Expansion Button */}
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        const item = getVideoItem();
+                        if (item) onImageClick([item], 0);
+                    }}
+                    className="absolute top-4 left-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 backdrop-blur-md transition-opacity opacity-0 group-hover:opacity-100"
+                    title="Fullscreen"
+                >
+                    <Maximize2 size={20} />
+                </button>
+                
+                {/* CC Button */}
                 {hasSubtitles && (
                      <button
                         onClick={toggleSubtitles}
@@ -837,7 +871,12 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
         }).filter((i): i is { id: number; src: string; caption: string | undefined; } => i !== null);
 
         if (galleryItems.length > 0) {
-            return <GalleryViewer items={galleryItems} />;
+            return (
+                <GalleryViewer 
+                    items={galleryItems} 
+                    onImageClick={(index) => onImageClick(galleryItems.map(i => ({...i, type: 'image' as const})), index)} 
+                />
+            );
         }
     }
 
@@ -846,7 +885,8 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
         <img 
             src={post.url} 
             alt={post.title} 
-            className="w-full rounded-xl mb-6 object-contain max-h-[60vh] bg-stone-100 dark:bg-stone-900 shadow-sm" 
+            className="w-full rounded-xl mb-6 object-contain max-h-[60vh] bg-stone-100 dark:bg-stone-900 shadow-sm cursor-zoom-in" 
+            onClick={() => onImageClick([{ src: post.url, caption: post.title, id: post.id, type: 'image' }], 0)}
         />
       );
     }
@@ -860,7 +900,8 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                  <img 
                     src={src} 
                     alt={post.title} 
-                    className="w-full rounded-xl object-contain max-h-[60vh] bg-stone-100 dark:bg-stone-900 shadow-sm" 
+                    className="w-full rounded-xl object-contain max-h-[60vh] bg-stone-100 dark:bg-stone-900 shadow-sm cursor-zoom-in" 
+                    onClick={() => onImageClick([{ src, caption: post.title, id: post.id, type: 'image' }], 0)}
                  />
                  {isImgurAlbum && (
                     <a 
@@ -951,151 +992,157 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                 className="flex-1 overflow-y-auto bg-white dark:bg-stone-950 relative"
             >
             <div className="p-4 md:p-8 md:pb-20 max-w-5xl mx-auto">
-                <div className="flex flex-wrap gap-2 mb-4 animate-list-enter items-center">
-                    {post.zenScore !== undefined && (
-                        <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border uppercase tracking-wider ${
-                            post.zenScore >= 80 ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900/50' :
-                            post.zenScore >= 50 ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-900/50' :
-                            'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-900/50'
-                        }`}>
-                            Zen Score: {post.zenScore}
-                        </span>
-                    )}
-                    {post.link_flair_text && (
-                        <FlairBadge 
-                            text={post.link_flair_text} 
-                            bgColor={post.link_flair_background_color}
-                            textColor={post.link_flair_text_color}
-                            className="text-[10px] px-2.5 py-1"
-                        />
-                    )}
-                </div>
-
-                <h2 className="text-xl md:text-2xl font-bold text-stone-900 dark:text-stone-100 mb-6 leading-snug animate-list-enter" style={{ animationDelay: '0.05s' }}>{decodeHtml(post.title)}</h2>
-                
-                <div className="animate-list-enter" style={{ animationDelay: '0.1s' }}>
-                    {renderMedia()}
-                </div>
-
-                {post.selftext && (
-                    <div className="mb-8 p-1 animate-list-enter" style={{ animationDelay: '0.15s' }}>
-                        <MarkdownRenderer content={post.selftext} onNavigateSub={onNavigateSub} textSize={textSize} />
-                    </div>
-                )}
-
-                <div className="flex items-center gap-6 py-4 border-t border-b border-stone-100 dark:border-stone-800 mb-6 animate-list-enter" style={{ animationDelay: '0.2s' }}>
-                    <div className="flex items-center gap-2">
-                        <div className="flex items-center bg-stone-100 dark:bg-stone-800 rounded-full px-3 py-1.5">
-                            <ArrowBigUp size={22} className={`${post.score > 0 ? 'text-orange-600 dark:text-orange-500' : 'text-stone-400'}`} strokeWidth={2.5} />
-                            <span className="font-bold text-sm ml-1 text-stone-700 dark:text-stone-300">{post.score > 1000 ? `${(post.score / 1000).toFixed(1)}k` : post.score}</span>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2 text-stone-500 dark:text-stone-400">
-                        <MessageSquare size={20} />
-                        <span className="font-semibold text-sm">{post.num_comments} Comments</span>
-                        {toxicCount > 0 && (
-                            <div className="flex items-center gap-1 ml-2 px-2 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 text-xs font-bold rounded-full border border-orange-200 dark:border-orange-800/50 animate-fade-in" title="Toxic comments hidden by Zen Shield">
-                                <ShieldAlert size={12} />
-                                <span>{toxicCount} filtered</span>
-                            </div>
+                {/* Post Title & Meta */}
+                <div className="mb-6">
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                        {post.link_flair_text && (
+                             <FlairBadge 
+                                text={post.link_flair_text} 
+                                bgColor={post.link_flair_background_color}
+                                textColor={post.link_flair_text_color}
+                             />
                         )}
+                        
+                        {post.isRageBait && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-red-500 bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded border border-red-100 dark:border-red-900/30 flex items-center gap-1">
+                                <ShieldAlert size={10} />
+                                Rage Bait Detected
+                            </span>
+                        )}
+
+                        {post.zenScore !== undefined && (
+                             <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
+                                post.zenScore >= 80 ? 'text-green-600 bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' :
+                                post.zenScore >= 50 ? 'text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800' :
+                                'text-orange-600 bg-orange-50 border-orange-200 dark:bg-orange-900/20 dark:border-orange-800'
+                            }`}>
+                                Zen Score: {post.zenScore}
+                            </span>
+                        )}
+                    </div>
+
+                    <h1 className="text-xl md:text-2xl font-bold text-stone-900 dark:text-stone-100 leading-snug mb-4">
+                        {decodeHtmlEntities(post.title)}
+                    </h1>
+
+                    {renderMedia()}
+                    
+                    {post.selftext && (
+                        <div className="mb-6 p-4 md:p-5 bg-stone-50 dark:bg-stone-900/50 rounded-xl border border-stone-100 dark:border-stone-800">
+                             <MarkdownRenderer content={decodeHtml(post.selftext)} onNavigateSub={onNavigateSub} textSize={textSize} />
+                        </div>
+                    )}
+                    
+                    <div className="flex items-center gap-4 text-stone-500 dark:text-stone-400 border-b border-stone-200 dark:border-stone-800 pb-6 mb-6">
+                        <div className="flex items-center gap-2 bg-stone-100 dark:bg-stone-800 px-3 py-1.5 rounded-full">
+                             <ArrowBigUp size={20} className={`${post.score > 0 ? 'text-orange-500' : ''}`} strokeWidth={2.5} />
+                             <span className="font-bold text-stone-700 dark:text-stone-300">{post.score > 1000 ? `${(post.score/1000).toFixed(1)}k` : post.score}</span>
+                        </div>
+                         <div className="flex items-center gap-2 bg-stone-100 dark:bg-stone-800 px-3 py-1.5 rounded-full">
+                             <MessageSquare size={18} />
+                             <span className="font-medium text-stone-700 dark:text-stone-300">{post.num_comments} Comments</span>
+                        </div>
+                        
+                        <div className="flex-1"></div>
+                        
+                        <a 
+                            href={`https://reddit.com${post.permalink}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1.5 text-xs font-medium text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 transition-colors"
+                        >
+                            <ExternalLink size={14} />
+                            Open on Reddit
+                        </a>
                     </div>
                 </div>
 
                 {/* Comments Section */}
-                {analyzingComments && (
-                    <div className="mb-6">
-                        <ScanningVisualizer mode="compact" />
-                        <p className="text-center text-[10px] text-stone-400 mt-2 uppercase tracking-wide">Shielding you from toxic threads...</p>
-                    </div>
-                )}
+                <div className="min-h-[300px]">
+                     {/* Comment Controls */}
+                     <div className="flex items-center justify-between mb-4 sticky top-0 bg-white/95 dark:bg-stone-950/95 backdrop-blur-sm py-3 z-10 border-b border-stone-100 dark:border-stone-800/50">
+                         <h3 className="font-bold text-lg text-stone-800 dark:text-stone-200">
+                             Discussion
+                         </h3>
+                     </div>
 
-                {loading ? (
-                    <div className="flex flex-col items-center justify-center py-12">
-                    <Loader2 className="animate-spin text-emerald-500 mb-2" size={32} />
-                    <p className="text-stone-400 text-sm animate-pulse">Loading discussion...</p>
-                    </div>
-                ) : (
-                    <div className="pb-20">
-                    {comments.map((comment, i) => {
-                        // Handle Top-Level 'more' items (Pagination)
-                        if (comment.kind === 'more') {
-                            return (
-                                    <div key={comment.data.id} className="mt-4 flex justify-center animate-list-enter">
-                                        <button
-                                            onClick={async () => {
-                                                // Handle top-level loading
-                                                try {
-                                                    const newChildren = await fetchMoreChildren(post.name, comment.data.children);
-                                                    setComments(prev => {
-                                                        const idx = prev.findIndex(p => p.data.id === comment.data.id);
-                                                        if (idx === -1) return prev;
-                                                        const next = [...prev];
-                                                        next.splice(idx, 1, ...newChildren);
-                                                        return next;
-                                                    });
-                                                } catch (e) {
-                                                    console.error("Top level load failed", e);
-                                                }
-                                            }}
-                                            className="text-emerald-600 dark:text-emerald-500 font-bold hover:bg-stone-100 dark:hover:bg-stone-800 px-4 py-2 rounded-full transition-colors flex items-center gap-2"
-                                        >
-                                            <CornerDownRight size={18} />
-                                            Load {comment.data.count} more comments
-                                        </button>
-                                    </div>
-                            );
-                        }
-
-                        return (
-                            <div key={comment.data.id} data-parent-comment="true" className="animate-list-enter" style={{ animationDelay: `${Math.min(i % 10, 5) * 0.03}s` }}>
-                                <LazyRender minHeight={80} rootMargin="600px">
-                                    <CommentNode 
-                                        comment={comment} 
-                                        onNavigateSub={onNavigateSub} 
-                                        textSize={textSize} 
-                                        opAuthor={post.author} 
-                                        toxicityAnalysis={commentAnalysisMap[comment.data.id]}
-                                        linkId={post.name}
-                                    />
-                                </LazyRender>
-                            </div>
-                        );
-                    })}
-                    {comments.length === 0 && (
-                        <div className="text-center py-12 bg-stone-50 dark:bg-stone-900/50 rounded-xl border border-dashed border-stone-200 dark:border-stone-800 animate-list-enter">
-                            <p className="text-stone-500 dark:text-stone-400 font-medium">No comments yet.</p>
-                            <p className="text-stone-400 text-sm mt-1">Be the first to start the conversation on Reddit!</p>
+                    {analyzingComments && (
+                        <div className="mb-4 p-4 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/30 rounded-xl flex items-center gap-3 animate-pulse">
+                            <ScanningVisualizer mode="compact" />
+                            <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Analyzing conversation health...</span>
                         </div>
                     )}
-                    </div>
-                )}
+                    
+                    {toxicCount > 0 && (
+                        <div className="mb-6 p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800 rounded-lg flex items-center gap-2">
+                             <ShieldAlert size={16} className="text-orange-500" />
+                             <span className="text-xs text-orange-700 dark:text-orange-400 font-medium">
+                                 Zen Shield active: {toxicCount} toxic comment threads collapsed.
+                             </span>
+                        </div>
+                    )}
+
+                     <div className="space-y-1">
+                         {loading ? (
+                             <div className="flex flex-col items-center justify-center py-12 text-stone-400">
+                                 <Loader2 size={32} className="animate-spin mb-3" />
+                                 <span className="text-sm font-medium">Loading conversation...</span>
+                             </div>
+                         ) : (
+                             comments.map((comment) => {
+                                 if (comment.kind === 't1') {
+                                     return (
+                                        <div key={comment.data.id} data-parent-comment="true">
+                                            <CommentNode 
+                                                comment={comment} 
+                                                depth={0} 
+                                                onNavigateSub={onNavigateSub} 
+                                                textSize={textSize}
+                                                opAuthor={post.author}
+                                                toxicityAnalysis={commentAnalysisMap[comment.data.id]}
+                                                linkId={post.name}
+                                            />
+                                        </div>
+                                     );
+                                 }
+                                 return null;
+                             })
+                         )}
+                         {!loading && comments.length === 0 && (
+                             <div className="text-center py-16 text-stone-500 dark:text-stone-400 italic bg-stone-50 dark:bg-stone-900/30 rounded-xl">
+                                No comments yet. Be the first to start the conversation on Reddit!
+                             </div>
+                         )}
+                     </div>
+                </div>
             </div>
             </div>
 
-            {comments.length > 5 && (
-                <>
-                    <button
-                        onClick={scrollToPrevParent}
-                        className="md:hidden absolute bottom-20 right-6 z-50 bg-stone-200 dark:bg-stone-800 text-stone-600 dark:text-stone-300 p-3 rounded-full shadow-lg shadow-black/10 hover:bg-stone-300 dark:hover:bg-stone-700 active:scale-95 transition-all opacity-90 hover:opacity-100 btn-press"
-                        aria-label="Previous comment"
+            {/* Floating Navigation Controls */}
+            <div className="absolute bottom-6 right-6 z-30 flex flex-col gap-2 pointer-events-none">
+                <div className="bg-white dark:bg-stone-800 p-1 rounded-full shadow-xl border border-stone-200 dark:border-stone-700 flex flex-col gap-0.5 pointer-events-auto">
+                    <button 
+                        onClick={scrollToPrevParent} 
+                        className="p-3 rounded-full hover:bg-stone-100 dark:hover:bg-stone-700 text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 transition-all active:scale-95" 
+                        title="Previous Thread"
                     >
-                        <ChevronUp size={24} />
+                        <ChevronUp size={20} />
                     </button>
-                    
-                    <button
-                        onClick={scrollToNextParent}
-                        className="md:hidden absolute bottom-6 right-6 z-50 bg-emerald-600 text-white p-3 rounded-full shadow-lg shadow-emerald-900/20 hover:bg-emerald-700 active:scale-95 transition-all opacity-90 hover:opacity-100 btn-press"
-                        aria-label="Next comment"
+                    <div className="h-px w-full bg-stone-100 dark:bg-stone-700"></div>
+                    <button 
+                        onClick={scrollToNextParent} 
+                        className="p-3 rounded-full hover:bg-stone-100 dark:hover:bg-stone-700 text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 transition-all active:scale-95" 
+                        title="Next Thread"
                     >
-                        <ChevronDown size={24} />
+                        <ChevronDown size={20} />
                     </button>
-                </>
-            )}
+                </div>
+            </div>
+
         </div>
         </div>
     </CommentContext.Provider>
   );
 };
 
-export default PostDetail;
+export default React.memo(PostDetail);
