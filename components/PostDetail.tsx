@@ -1,14 +1,16 @@
+
 import React, { useEffect, useState, useRef, useMemo, memo, useContext, useCallback } from 'react';
-import { FilteredPost, RedditComment, RedditListing, CommentAnalysis, AIConfig, RedditMore, GalleryItem } from '../types';
+import { FilteredPost, RedditComment, RedditListing, CommentAnalysis, AIConfig, RedditMore, GalleryItem, FactCheckResult } from '../types';
 import { fetchComments, fetchMoreChildren } from '../services/redditService';
-import { analyzeCommentsForZen } from '../services/aiService';
-import { X, ExternalLink, Loader2, ArrowBigUp, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MessageSquare, Images, Plus, MoreHorizontal, ShieldAlert, Eye, Captions, CornerDownRight, Maximize2, Share2, Clock, User } from 'lucide-react';
+import { analyzeCommentsForZen, factCheckComment } from '../services/aiService';
+import { X, ExternalLink, Loader2, ArrowBigUp, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MessageSquare, Images, Plus, MoreHorizontal, ShieldAlert, Eye, Captions, CornerDownRight, Maximize2, Share2, Clock, User, Scale } from 'lucide-react';
 import Hls from 'hls.js';
 import { formatDistanceToNow } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ScanningVisualizer from './ScanningVisualizer';
 import LazyRender from './LazyRender';
+import FactCheckModal from './FactCheckModal';
 
 interface PostDetailProps {
   post: FilteredPost;
@@ -24,7 +26,8 @@ interface PostDetailProps {
 const CommentContext = React.createContext<{
     isCollapsed: (id: string) => boolean;
     setCollapsed: (id: string, state: boolean) => void;
-}>({ isCollapsed: () => false, setCollapsed: () => {} });
+    onFactCheck: (text: string, subreddit: string) => void;
+}>({ isCollapsed: () => false, setCollapsed: () => {}, onFactCheck: () => {} });
 
 // Generate consistent avatar color from username
 const getUserColor = (name: string) => {
@@ -301,8 +304,9 @@ const CommentNode: React.FC<{
     opAuthor: string;
     toxicityAnalysis?: CommentAnalysis | null;
     linkId: string; // Needed for fetching more
-}> = memo(({ comment, depth = 0, onNavigateSub, textSize, opAuthor, toxicityAnalysis, linkId }) => {
-  const { isCollapsed, setCollapsed: setGlobalCollapsed } = useContext(CommentContext);
+    subreddit: string;
+}> = memo(({ comment, depth = 0, onNavigateSub, textSize, opAuthor, toxicityAnalysis, linkId, subreddit }) => {
+  const { isCollapsed, setCollapsed: setGlobalCollapsed, onFactCheck } = useContext(CommentContext);
   
   // Initialize state from context to survive unmounts
   const [collapsed, setCollapsed] = useState(() => isCollapsed(comment.data.id));
@@ -318,6 +322,16 @@ const CommentNode: React.FC<{
   const data = comment.data;
   const isOp = data.author === opAuthor;
   const isToxic = toxicityAnalysis?.isToxic;
+  
+  // Determine if Fact Check should be shown
+  const showFactCheck = useMemo(() => {
+    // If we have an AI analysis, use the explicit isFactCheckable flag
+    if (toxicityAnalysis) {
+        return !!toxicityAnalysis.isFactCheckable;
+    }
+    // Fallback: If AI analysis is not enabled/run, show for longer comments
+    return data.body.length > 20;
+  }, [toxicityAnalysis, data.body.length]);
 
   // Initialize replies from props
   useEffect(() => {
@@ -520,6 +534,16 @@ const CommentNode: React.FC<{
                         <MessageSquare size={14} />
                         <span>Reply</span>
                     </button>
+                    {showFactCheck && (
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); onFactCheck(data.body, subreddit); }}
+                            className="flex items-center gap-1.5 text-stone-400 hover:text-emerald-600 dark:hover:text-emerald-400 text-xs font-medium transition-colors btn-press"
+                            title="Fact Check with AI"
+                        >
+                            <Scale size={14} />
+                            <span>Fact Check</span>
+                        </button>
+                    )}
                     <button className="p-1 text-stone-300 hover:text-stone-500 dark:text-stone-600 dark:hover:text-stone-400 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors btn-press">
                          <MoreHorizontal size={14} />
                     </button>
@@ -540,6 +564,7 @@ const CommentNode: React.FC<{
                                         opAuthor={opAuthor} 
                                         toxicityAnalysis={toxicityAnalysis} 
                                         linkId={linkId}
+                                        subreddit={subreddit}
                                     />
                                 );
                             }
@@ -612,6 +637,12 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
   const [analyzingComments, setAnalyzingComments] = useState(false);
   const [commentAnalysisMap, setCommentAnalysisMap] = useState<Record<string, CommentAnalysis>>({});
   
+  // Fact Check State
+  const [isFactChecking, setIsFactChecking] = useState(false);
+  const [factCheckResult, setFactCheckResult] = useState<FactCheckResult | null>(null);
+  const [factCheckText, setFactCheckText] = useState("");
+  const [factCheckModalOpen, setFactCheckModalOpen] = useState(false);
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -635,11 +666,28 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
       }
   }, []);
 
+  const handleFactCheck = useCallback(async (text: string, subreddit: string) => {
+      setFactCheckText(text);
+      setFactCheckModalOpen(true);
+      setIsFactChecking(true);
+      setFactCheckResult(null);
+
+      try {
+          const result = await factCheckComment(text, subreddit);
+          setFactCheckResult(result);
+      } catch (e) {
+          console.error("Fact check UI failed", e);
+      } finally {
+          setIsFactChecking(false);
+      }
+  }, []);
+
   // Stable context value
   const contextValue = useMemo(() => ({
       isCollapsed,
-      setCollapsed
-  }), [isCollapsed, setCollapsed]);
+      setCollapsed,
+      onFactCheck: handleFactCheck
+  }), [isCollapsed, setCollapsed, handleFactCheck]);
 
   const [hasSubtitles, setHasSubtitles] = useState(false);
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
@@ -1091,6 +1139,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                                                 opAuthor={post.author}
                                                 toxicityAnalysis={commentAnalysisMap[comment.data.id]}
                                                 linkId={post.name}
+                                                subreddit={post.subreddit}
                                             />
                                         </div>
                                      );
@@ -1128,6 +1177,15 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                     </button>
                 </div>
             </div>
+
+            {/* Fact Check Modal */}
+            <FactCheckModal 
+                isOpen={factCheckModalOpen}
+                onClose={() => setFactCheckModalOpen(false)}
+                result={factCheckResult}
+                isLoading={isFactChecking}
+                originalText={factCheckText}
+            />
 
         </div>
         </div>

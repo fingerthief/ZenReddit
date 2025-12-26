@@ -181,6 +181,13 @@ export interface CommentAnalysis {
   id: string;
   isToxic: boolean;
   reason?: string;
+  isFactCheckable?: boolean;
+}
+
+export interface FactCheckResult {
+  verdict: 'True' | 'False' | 'Misleading' | 'Unverified' | 'Opinion';
+  explanation: string;
+  sources: { title: string; uri: string }[];
 }
 
 // Firebase Configuration Types

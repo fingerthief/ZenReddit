@@ -1,4 +1,5 @@
-import { RedditPostData, AIConfig, RedditComment, CommentAnalysis } from "../types";
+
+import { RedditPostData, AIConfig, RedditComment, CommentAnalysis, FactCheckResult } from "../types";
 import { GoogleGenAI } from "@google/genai";
 
 export interface AnalysisResult {
@@ -14,6 +15,8 @@ const cleanJsonString = (str: string) => {
 };
 
 const PROMPT_MODEL_ID = 'gemini-2.0-flash-lite-preview-02-05';
+// We need a model that supports search grounding for fact checking
+const FACT_CHECK_MODEL_ID = 'gemini-2.0-flash-exp'; 
 
 export const analyzePostsForZen = async (posts: RedditPostData[], config?: AIConfig): Promise<AnalysisResult[]> => {
   if (posts.length === 0) return [];
@@ -191,21 +194,18 @@ export const analyzeCommentsForZen = async (
   ` : "Context: General Reddit Thread";
 
   const systemPrompt = `
-    You are a highly nuanced moderator for a Zen community.
-    Analyze the following Reddit comments for TOXICITY.
+    You are a highly nuanced moderator.
+    Analyze the following Reddit comments for TOXICITY and FACT CHECKABILITY.
 
     ${contextStr}
 
-    CRITICAL INSTRUCTIONS FOR CONTEXTUAL ANALYSIS:
-    1. **Conversation Chain**: Look at the "replies_context". 
-       - If replies are laughing ("lol", "lmao") or playing along, the comment is likely a JOKE/BANTER, even if it uses "edgy" language. DO NOT flag these.
-       - If replies are angry or hurt, the comment might be toxic.
-    2. **Dramatic vs Toxic**: 
-       - Phrases like "I'm dying", "I hate you (jokingly)", "This is insane", or slang are NOT toxic.
-       - Only flag content that is genuinely abusive, hateful, or intended to cause real harm/rage.
-    3. **Subreddit Context**: If this is a gaming/meme sub, expect trash talk. If it's a support sub, be stricter.
+    Instructions:
+    1. **Toxicity**: Flag genuine abuse, hate, or harm. Ignore friendly banter ("lol I hate you") or dramatic slang ("I'm dying").
+    2. **Fact Checkability**: Determine if the comment contains verifiable factual claims (statistics, historical events, scientific assertions, specific news).
+       - Set "isFactCheckable": true if it contains checkable facts.
+       - Set "isFactCheckable": false if it is pure opinion ("I like this"), personal anecdote ("I went there"), or a joke.
 
-    Return JSON: { "results": [{ "id": "string", "isToxic": boolean, "reason": "short string explanation" }] }
+    Return JSON: { "results": [{ "id": "string", "isToxic": boolean, "reason": "string", "isFactCheckable": boolean }] }
   `;
 
   if (config?.openRouterKey) {
@@ -242,7 +242,8 @@ export const analyzeCommentsForZen = async (
             return results.map((r: any) => ({
                 id: r.id,
                 isToxic: !!r.isToxic,
-                reason: r.reason
+                reason: r.reason,
+                isFactCheckable: !!r.isFactCheckable
             }));
         }
         return [];
@@ -273,7 +274,8 @@ export const analyzeCommentsForZen = async (
             return results.map((r: any) => ({
                 id: r.id,
                 isToxic: !!r.isToxic,
-                reason: r.reason
+                reason: r.reason,
+                isFactCheckable: !!r.isFactCheckable
             }));
         }
         return [];
@@ -285,3 +287,88 @@ export const analyzeCommentsForZen = async (
 
   return [];
 };
+
+// --- Fact Checking ---
+
+export const factCheckComment = async (
+    commentBody: string, 
+    subreddit: string
+): Promise<FactCheckResult> => {
+    const apiKey = process.env.API_KEY;
+    
+    // Fallback if no Google API key is present (Fact Checking requires Google Search Tool)
+    if (!apiKey) {
+        return {
+            verdict: 'Unverified',
+            explanation: "API Key required for live fact checking.",
+            sources: []
+        };
+    }
+
+    try {
+        const ai = new GoogleGenAI({ apiKey });
+        
+        const prompt = `
+            Fact check the main claims in this Reddit comment from r/${subreddit}:
+            "${commentBody.substring(0, 500)}"
+            
+            1. Search for reliable sources to verify the claims.
+            2. Determine a verdict: "True", "False", "Misleading", "Opinion" (if subjective), or "Unverified".
+            3. Provide a concise explanation (max 2 sentences).
+            4. Do not use JSON output format for this request, just return the text so we can extract citations.
+        `;
+
+        const response = await ai.models.generateContent({
+            model: FACT_CHECK_MODEL_ID,
+            contents: prompt,
+            config: {
+                tools: [{ googleSearch: {} }],
+                // We do NOT use responseMimeType: 'application/json' here because
+                // we need to access the groundingMetadata chunks which are tied to the text generation.
+            }
+        });
+
+        // Parse sources from grounding chunks
+        const sources: { title: string; uri: string }[] = [];
+        const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+        
+        if (chunks) {
+            chunks.forEach((chunk: any) => {
+                if (chunk.web?.uri && chunk.web?.title) {
+                    sources.push({
+                        title: chunk.web.title,
+                        uri: chunk.web.uri
+                    });
+                }
+            });
+        }
+
+        const text = response.text || "";
+        
+        // Simple heuristic parsing of the free-text response since we didn't force JSON
+        // (Forcing JSON with tools sometimes degrades the tool usage quality in smaller models)
+        let verdict: FactCheckResult['verdict'] = 'Unverified';
+        const lowerText = text.toLowerCase();
+        
+        if (lowerText.includes('verdict: true') || lowerText.startsWith('true')) verdict = 'True';
+        else if (lowerText.includes('verdict: false') || lowerText.startsWith('false')) verdict = 'False';
+        else if (lowerText.includes('verdict: misleading') || lowerText.startsWith('misleading')) verdict = 'Misleading';
+        else if (lowerText.includes('verdict: opinion') || lowerText.startsWith('opinion')) verdict = 'Opinion';
+        
+        return {
+            verdict,
+            explanation: text, // The full text acts as the explanation
+            sources: sources.filter((s, i, self) => 
+                self.findIndex((t) => t.uri === s.uri) === i
+            ).slice(0, 5) // Dedupe and limit
+        };
+
+    } catch (error) {
+        console.error("Fact Check Failed:", error);
+        return {
+            verdict: 'Unverified',
+            explanation: "Could not perform fact check at this time.",
+            sources: []
+        };
+    }
+}
