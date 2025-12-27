@@ -58,6 +58,22 @@ const triggerHaptic = () => {
     if (navigator.vibrate) navigator.vibrate(5);
 };
 
+// Heuristic to detect if a comment is likely fact-checkable (contains claims, stats, sources)
+// rather than just opinion or short reaction.
+const isPotentiallyFactCheckable = (text: string): boolean => {
+  if (text.length < 50) return false; // Too short to likely contain a complex claim
+
+  // Strong indicators
+  const hasLink = /https?:\/\//.test(text);
+  const hasNumbers = /\d/.test(text); // Years, stats, quantities
+  const hasQuotes = /["“][^"”]+["”]/.test(text); // Quoting sources
+  
+  // Keywords indicating assertions of fact or external reference
+  const claimKeywords = /\b(source|evidence|study|report|data|stats|statistic|research|proven|official|according|history|science|law|legal|policy|released|announced|percent|%|dollar|cost|price|rate|increase|decrease|truth|false|fake|real|actually|fact)\b/i;
+  
+  return hasLink || hasNumbers || hasQuotes || claimKeywords.test(text);
+};
+
 const FlairBadge: React.FC<{ text: string; bgColor?: string; textColor?: 'dark' | 'light'; className?: string }> = ({ text, bgColor, textColor, className = '' }) => {
   if (!text) return null;
   
@@ -333,9 +349,9 @@ const CommentNode: React.FC<{
     if (toxicityAnalysis) {
         return !!toxicityAnalysis.isFactCheckable;
     }
-    // Fallback: If AI analysis is not enabled/run, show for longer comments
-    return data.body.length > 20;
-  }, [toxicityAnalysis, data.body.length]);
+    // Fallback: heuristic
+    return isPotentiallyFactCheckable(data.body);
+  }, [toxicityAnalysis, data.body]);
 
   // Initialize replies from props
   useEffect(() => {
