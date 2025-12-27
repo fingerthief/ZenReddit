@@ -1,5 +1,5 @@
 
-import { RedditPost, RedditComment, RedditMore, SortOption, TopTimeOption, SubredditAbout } from '../types';
+import { RedditPost, RedditComment, RedditMore, SortOption, TopTimeOption, SubredditAbout, RedditPostData } from '../types';
 
 const BASE_URL = 'https://www.reddit.com';
 const REQUEST_TIMEOUT_MS = 15000;
@@ -292,6 +292,24 @@ export const fetchComments = async (permalink: string): Promise<(RedditComment |
   } catch (error) {
     console.error("Failed to fetch comments", error);
     return [];
+  }
+};
+
+export const fetchPostByPermalink = async (permalink: string): Promise<RedditPostData | null> => {
+  const url = `${BASE_URL}${permalink.replace(/\/$/, '')}.json?raw_json=1`;
+  try {
+    const data = await fetchWithProxy(url);
+    // Reddit API returns an array: [Listing(Post), Listing(Comments)]
+    if (Array.isArray(data) && data.length > 0) {
+      const postChildren = data[0].data?.children;
+      if (postChildren && postChildren.length > 0 && postChildren[0].kind === 't3') {
+        return postChildren[0].data;
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error("Failed to fetch specific post", error);
+    return null;
   }
 };
 

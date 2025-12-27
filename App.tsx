@@ -11,7 +11,7 @@ import LazyRender from './components/LazyRender';
 import SubredditHeader from './components/SubredditHeader';
 import MobileBottomNav from './components/MobileBottomNav';
 import { FeedType, FilteredPost, RedditPostData, AIConfig, SortOption, TopTimeOption, CachedAnalysis, GalleryItem, ViewMode } from './types';
-import { fetchFeed } from './services/redditService';
+import { fetchFeed, fetchPostByPermalink } from './services/redditService';
 import { analyzePostsForZen, AnalysisResult } from './services/aiService';
 import { Loader2, RefreshCw, CloudOff, TriangleAlert, Search, ChevronDown, LayoutGrid, List, X, Flame } from 'lucide-react';
 
@@ -268,6 +268,71 @@ const App: React.FC = () => {
       setSeenPosts(prev => ({ ...prev, [post.id]: Date.now() }));
   }, []);
 
+  // Helper to handle clicks on reddit links (subreddits, posts) from within comments/selftext
+  const handleInternalLinkClick = useCallback(async (url: string) => {
+      // 1. Clean URL to relative path
+      let path = url;
+      try {
+          // If it's a full URL, strip domain if it's reddit
+          if (url.startsWith('http')) {
+              const urlObj = new URL(url);
+              if (urlObj.hostname.includes('reddit.com') || urlObj.hostname.includes('redd.it')) {
+                  path = urlObj.pathname;
+              } else {
+                  // External link
+                  window.open(url, '_blank');
+                  return;
+              }
+          }
+      } catch (e) {
+          // invalid url, ignore
+          return;
+      }
+
+      // 2. Check for Subreddit: /r/subreddit
+      const subMatch = path.match(/^\/r\/([^/]+)\/?$/i);
+      if (subMatch) {
+          const subName = subMatch[1];
+          handleNavigate('subreddit', subName);
+          if (selectedPost) {
+             // If we are in a modal, we probably want to close it to see the feed
+             handlePostClose();
+          }
+          return;
+      }
+
+      // 3. Check for Post: /r/subreddit/comments/id/...
+      // Pattern: /r/{sub}/comments/{id}/{slug}/...
+      const postMatch = path.match(/^\/r\/([^/]+)\/comments\/([^/]+)/i);
+      if (postMatch) {
+          // It's a post link. We need to fetch it and open the modal.
+          // Note: We might be already in a modal. Replacing the content is fine.
+          
+          // Show a temporary loading state for the user feedback?
+          // Since we don't have a global loader, we can just fetch and set.
+          // Ideally we would show a toast or loader. For now, let's just fetch.
+          
+          try {
+              const postData = await fetchPostByPermalink(path);
+              if (postData) {
+                  const filteredPost: FilteredPost = { ...postData, zenScore: 50 }; // Default zen score as we haven't analyzed it yet
+                  
+                  // Analyze single post on the fly? Or just show it? 
+                  // Let's just show it to be fast.
+                  
+                  handlePostClick(filteredPost);
+              }
+          } catch (e) {
+              console.error("Failed to load linked post", e);
+              window.open(url, '_blank');
+          }
+          return;
+      }
+
+      // Fallback
+      window.open(url, '_blank');
+  }, [selectedPost]);
+
   const handleGalleryClick = useCallback((items: GalleryItem[], index: number) => {
       try { window.history.pushState({ imageOpen: true }, '', null); } catch (e) {}
       setViewingGallery({ items, index });
@@ -385,13 +450,18 @@ const App: React.FC = () => {
   const loadPosts = useCallback(async (isLoadMore = false, forceRefresh = false) => {
     if ((loading || analyzing) && isLoadMore) return;
     
-    if (!isLoadMore) {
-        if (abortControllerRef.current) abortControllerRef.current.abort();
-        abortControllerRef.current = new AbortController();
-    }
+    const controller = new AbortController();
 
     if (!isLoadMore) {
-        if (!isRefreshing && forceRefresh) setPosts([]); 
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+        abortControllerRef.current = controller;
+
+        if (!isRefreshing) {
+            setPosts([]);
+            setAfter(null);
+        }
         setLoading(true);
         setError(null);
     } else {
@@ -401,7 +471,7 @@ const App: React.FC = () => {
     try {
       if (!isLoadMore) await new Promise(resolve => setTimeout(resolve, 50));
       
-      if (abortControllerRef.current?.signal.aborted) return;
+      if (controller.signal.aborted) return;
 
       const { posts: rawPostsData, after: newAfter } = await fetchFeed(
         currentFeed, 
@@ -415,14 +485,17 @@ const App: React.FC = () => {
         forceRefresh
       );
       
-      if (abortControllerRef.current?.signal.aborted) return;
+      if (controller.signal.aborted) return;
 
       setAfter(newAfter);
+      
       const rawPosts = rawPostsData.map(p => p.data);
 
       if (rawPosts.length === 0) {
-          if (!isLoadMore) setLoading(false);
-          setAnalyzing(false);
+          if (abortControllerRef.current === controller) {
+             if (!isLoadMore) setLoading(false);
+             setAnalyzing(false);
+          }
           return;
       }
 
@@ -443,7 +516,7 @@ const App: React.FC = () => {
           try {
              newAnalysisResults = await analyzePostsForZen(postsToAnalyze, aiConfig);
              
-             if (abortControllerRef.current?.signal.aborted) return;
+             if (controller.signal.aborted) return;
 
              newAnalysisResults.forEach(res => {
                  newCache[res.id] = { ...res, timestamp: Date.now() };
@@ -467,14 +540,16 @@ const App: React.FC = () => {
       const blocked = finalPosts.length - filtered.length;
       if (blocked > 0) setBlockedCount(prev => prev + blocked);
 
+      if (controller.signal.aborted) return;
+
       setPosts(prev => isLoadMore ? [...prev, ...filtered] : filtered);
 
     } catch (err: any) {
-        if (err.name !== 'AbortError') {
+        if (err.name !== 'AbortError' && !controller.signal.aborted) {
              setError(err.message || "Failed to load feed");
         }
     } finally {
-        if (!abortControllerRef.current?.signal.aborted) {
+        if (abortControllerRef.current === controller) {
             setLoading(false);
             setAnalyzing(false);
         }
@@ -807,6 +882,7 @@ const App: React.FC = () => {
             aiConfig={aiConfig}
             onCommentsBlocked={handleCommentsBlocked}
             onImageClick={handleGalleryClick}
+            onInternalLinkClick={handleInternalLinkClick}
           />
       )}
 

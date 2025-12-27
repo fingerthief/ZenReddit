@@ -20,6 +20,7 @@ interface PostDetailProps {
   aiConfig: AIConfig;
   onCommentsBlocked: (count: number) => void;
   onImageClick: (items: GalleryItem[], initialIndex: number) => void;
+  onInternalLinkClick?: (url: string) => void;
 }
 
 // Context to persist comment state (like collapsed status) even when virtualized (unmounted)
@@ -125,7 +126,12 @@ const extractMediaFromText = (text: string) => {
 };
 
 // Markdown Renderer Component
-const MarkdownRenderer: React.FC<{ content: string; onNavigateSub?: (sub: string) => void; textSize: 'small' | 'medium' | 'large' }> = memo(({ content, onNavigateSub, textSize }) => {
+const MarkdownRenderer: React.FC<{ 
+    content: string; 
+    onNavigateSub?: (sub: string) => void; 
+    onInternalLinkClick?: (url: string) => void;
+    textSize: 'small' | 'medium' | 'large' 
+}> = memo(({ content, onNavigateSub, onInternalLinkClick, textSize }) => {
   const proseClass = {
       small: 'prose-sm',
       medium: 'prose-base',
@@ -139,21 +145,25 @@ const MarkdownRenderer: React.FC<{ content: string; onNavigateSub?: (sub: string
         components={{
             // @ts-ignore
             a: ({node, href, ...props}) => {
+                // Regex for /r/subreddit and full reddit links including comments
+                const isRedditLink = href?.match(/^(?:https?:\/\/(?:www\.|old\.|new\.)?reddit\.com)?(\/r\/[A-Za-z0-9_]+(?:\/comments\/[A-Za-z0-9]+)?\/?)?/);
+                
+                // Specific checks
                 const isSubLink = href?.match(/^(\/)?r\/([^/]+)/) || href?.match(/^https?:\/\/(www\.)?reddit\.com\/r\/([^/]+)/);
                 
-                if (isSubLink && onNavigateSub) {
-                     const subName = isSubLink[2];
-                     return (
+                // If we have an internal link handler and it looks like a reddit link
+                if (onInternalLinkClick && isRedditLink && (isRedditLink[1] || href?.startsWith('/r/'))) {
+                    return (
                         <a 
                             {...props} 
                             href={href} 
                             onClick={(e) => {
                                 e.preventDefault();
-                                onNavigateSub(subName);
+                                if (href) onInternalLinkClick(href);
                             }}
                             className="text-emerald-600 dark:text-emerald-400 hover:underline font-medium cursor-pointer"
                         />
-                     );
+                    );
                 }
 
                 return <a {...props} href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline" />
@@ -325,7 +335,8 @@ const CommentNode: React.FC<{
     toxicityAnalysis?: CommentAnalysis | null;
     linkId: string; // Needed for fetching more
     subreddit: string;
-}> = memo(({ comment, depth = 0, onNavigateSub, textSize, opAuthor, toxicityAnalysis, linkId, subreddit }) => {
+    onInternalLinkClick?: (url: string) => void;
+}> = memo(({ comment, depth = 0, onNavigateSub, textSize, opAuthor, toxicityAnalysis, linkId, subreddit, onInternalLinkClick }) => {
   const { isCollapsed, setCollapsed: setGlobalCollapsed, onFactCheck } = useContext(CommentContext);
   
   // Initialize state from context to survive unmounts
@@ -526,7 +537,12 @@ const CommentNode: React.FC<{
 
             <div className="flex-1 min-w-0 pb-1 pr-1 pl-1">
                 <div className="pt-0.5 pb-2 text-stone-800 dark:text-stone-200">
-                        <MarkdownRenderer content={data.body} onNavigateSub={onNavigateSub} textSize={textSize} />
+                        <MarkdownRenderer 
+                            content={data.body} 
+                            onNavigateSub={onNavigateSub} 
+                            onInternalLinkClick={onInternalLinkClick}
+                            textSize={textSize} 
+                        />
                 </div>
 
                 {mediaUrls.length > 0 && (
@@ -586,6 +602,7 @@ const CommentNode: React.FC<{
                                         toxicityAnalysis={toxicityAnalysis} 
                                         linkId={linkId}
                                         subreddit={subreddit}
+                                        onInternalLinkClick={onInternalLinkClick}
                                     />
                                 );
                             }
@@ -652,7 +669,7 @@ const CommentNode: React.FC<{
   );
 });
 
-const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, textSize, aiConfig, onCommentsBlocked, onImageClick }) => {
+const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, textSize, aiConfig, onCommentsBlocked, onImageClick, onInternalLinkClick }) => {
   const [comments, setComments] = useState<(RedditComment | RedditMore)[]>([]);
   const [loading, setLoading] = useState(true);
   const [analyzingComments, setAnalyzingComments] = useState(false);
@@ -1081,7 +1098,12 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                     
                     {post.selftext && (
                         <div className="mb-6 p-4 md:p-5 bg-stone-50 dark:bg-stone-900/50 md:rounded-xl border-y md:border border-stone-100 dark:border-stone-800 -mx-4 md:mx-0">
-                             <MarkdownRenderer content={decodeHtml(post.selftext)} onNavigateSub={onNavigateSub} textSize={textSize} />
+                             <MarkdownRenderer 
+                                content={decodeHtml(post.selftext)} 
+                                onNavigateSub={onNavigateSub} 
+                                onInternalLinkClick={onInternalLinkClick}
+                                textSize={textSize} 
+                            />
                         </div>
                     )}
                     
@@ -1161,6 +1183,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                                                 toxicityAnalysis={commentAnalysisMap[comment.data.id]}
                                                 linkId={post.name}
                                                 subreddit={post.subreddit}
+                                                onInternalLinkClick={onInternalLinkClick}
                                             />
                                         </div>
                                      );
@@ -1179,22 +1202,24 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
             </div>
 
             {/* Floating Navigation Controls */}
-            <div className="absolute bottom-6 right-6 z-30 flex flex-col gap-2 pointer-events-none mb-safe md:mb-0">
-                <div className="bg-white dark:bg-stone-800 p-1 rounded-full shadow-xl border border-stone-200 dark:border-stone-700 flex flex-col gap-0.5 pointer-events-auto">
+            <div className="absolute bottom-6 right-4 md:right-8 z-30 flex flex-col gap-2 pointer-events-none mb-safe md:mb-0 transition-opacity duration-200 opacity-90 hover:opacity-100">
+                <div className="bg-white/80 dark:bg-stone-900/80 backdrop-blur-xl p-1.5 rounded-full shadow-lg border border-white/20 dark:border-white/10 ring-1 ring-black/5 dark:ring-white/5 flex flex-col gap-1 pointer-events-auto">
                     <button 
                         onClick={scrollToPrevParent} 
-                        className="p-3 rounded-full hover:bg-stone-100 dark:hover:bg-stone-700 text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 transition-all active:scale-95" 
+                        className="p-3 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-stone-600 dark:text-stone-300 transition-all active:scale-90 flex items-center justify-center group" 
                         title="Previous Thread"
                     >
-                        <ChevronUp size={20} />
+                        <ChevronUp size={22} className="group-hover:-translate-y-0.5 transition-transform duration-300" strokeWidth={2.5} />
                     </button>
-                    <div className="h-px w-full bg-stone-100 dark:bg-stone-700"></div>
+                    
+                    <div className="h-px w-4 bg-stone-300/50 dark:bg-stone-700/50 mx-auto"></div>
+                    
                     <button 
                         onClick={scrollToNextParent} 
-                        className="p-3 rounded-full hover:bg-stone-100 dark:hover:bg-stone-700 text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 transition-all active:scale-95" 
+                        className="p-3 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-stone-600 dark:text-stone-300 transition-all active:scale-90 flex items-center justify-center group" 
                         title="Next Thread"
                     >
-                        <ChevronDown size={20} />
+                        <ChevronDown size={22} className="group-hover:translate-y-0.5 transition-transform duration-300" strokeWidth={2.5} />
                     </button>
                 </div>
             </div>

@@ -1,4 +1,5 @@
 
+
 // Reddit API Types
 
 export interface RedditPostData {
@@ -137,11 +138,6 @@ export interface FilteredPost extends RedditPostData {
 export type FeedType = 'popular' | 'all' | 'subreddit' | 'search';
 export type ViewMode = 'card' | 'compact';
 
-export interface SubredditSubscription {
-  name: string;
-  icon?: string;
-}
-
 export interface GalleryItem {
   src: string;
   caption?: string;
@@ -169,6 +165,16 @@ export interface AIConfig {
   analyzeComments?: boolean; 
 }
 
+export interface FirebaseConfig {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  storageBucket: string;
+  messagingSenderId: string;
+  appId: string;
+  measurementId?: string;
+}
+
 export interface CachedAnalysis {
   id: string;
   isRageBait: boolean;
@@ -188,15 +194,4 @@ export interface FactCheckResult {
   verdict: 'True' | 'False' | 'Misleading' | 'Unverified' | 'Opinion';
   explanation: string;
   sources: { title: string; uri: string }[];
-}
-
-// Firebase Configuration Types
-export interface FirebaseConfig {
-  apiKey: string;
-  authDomain: string;
-  projectId: string;
-  storageBucket: string;
-  messagingSenderId: string;
-  appId: string;
-  measurementId?: string;
 }
