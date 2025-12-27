@@ -1,10 +1,10 @@
 
-import { RedditPost, RedditComment, RedditMore, SortOption, TopTimeOption, SubredditAbout, RedditPostData } from '../types';
+import { RedditPost, RedditComment, RedditMore, SortOption, TopTimeOption, SubredditAbout, RedditPostData, CommentSortOption, RedditUserAbout } from '../types';
 
 const BASE_URL = 'https://www.reddit.com';
-const REQUEST_TIMEOUT_MS = 15000;
+const REQUEST_TIMEOUT_MS = 20000; // Increased to 20s for slower proxies
 const MAX_RETRIES = 3;
-const MAX_CONCURRENT_REQUESTS = 3; 
+const MAX_CONCURRENT_REQUESTS = 2; // Reduced to prevent rate limiting
 
 // --- Caching System ---
 
@@ -22,11 +22,16 @@ const TTL = {
   COMMENTS: 10 * 60 * 1000, // 10 minutes for comment threads
   ABOUT: 24 * 60 * 60 * 1000, // 24 hours for subreddit sidebar/icons
   SEARCH: 10 * 60 * 1000,    // 10 minutes for search results
+  USER: 15 * 60 * 1000,      // 15 minutes for user profiles
   DEFAULT: 2 * 60 * 1000     // 2 minutes default
 };
 
 const getCacheTTL = (url: string): number => {
-  if (url.includes('/about.json')) return TTL.ABOUT;
+  if (url.includes('/about.json')) {
+    // If it's a user about page, it has user structure
+    if (url.includes('/user/')) return TTL.USER;
+    return TTL.ABOUT; 
+  }
   if (url.includes('/comments/')) return TTL.COMMENTS;
   if (url.includes('/search.json')) return TTL.SEARCH;
   if (url.includes('/r/') || url.includes('popular') || url.includes('all')) return TTL.FEED;
@@ -44,20 +49,28 @@ const HEADERS = {
 // --- Proxy Management ---
 
 const PROXY_PROVIDERS = [
-  (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  // Primary: Very reliable, specifically designed for CORS
   (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
+  
+  // Secondary: CodeTabs is robust for JSON data
+  (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  
+  // Tertiary: Fallback format
+  (url: string) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
 ];
 
-// Helper to shuffle proxies for rotation
+// Helper to shuffle proxies for rotation so we don't hammer one
 const getShuffledProxies = (method: string = 'GET') => {
   let proxies = [...PROXY_PROVIDERS];
+  
+  // POST requests usually fail on many public proxies, corsproxy.io is the best bet
   if (method === 'POST') {
       return [
           (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`
       ];
   }
+  
+  // Fisher-Yates shuffle
   for (let i = proxies.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [proxies[i], proxies[j]] = [proxies[j], proxies[i]];
@@ -111,17 +124,37 @@ const globalRequestQueue = new RequestQueue(MAX_CONCURRENT_REQUESTS);
 // --- Fetch Implementation ---
 
 const fetchWithTimeout = async (url: string, options: RequestInit = {}) => {
+    const { signal, ...restOptions } = options;
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    
+    // Wire up parent signal if provided
+    const onAbort = () => controller.abort();
+    if (signal) {
+        signal.addEventListener('abort', onAbort);
+        if (signal.aborted) controller.abort();
+    }
+
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    
     try {
         const response = await fetch(url, {
-            ...options,
-            signal: options.signal || controller.signal
+            ...restOptions,
+            signal: controller.signal
         });
-        clearTimeout(id);
+        clearTimeout(timeoutId);
+        if (signal) signal.removeEventListener('abort', onAbort);
         return response;
-    } catch (err) {
-        clearTimeout(id);
+    } catch (err: any) {
+        clearTimeout(timeoutId);
+        if (signal) signal.removeEventListener('abort', onAbort);
+        
+        // Differentiate between User Abort and Timeout
+        if (signal?.aborted) {
+            throw err; // Re-throw original abort
+        }
+        if (err.name === 'AbortError') {
+             throw new Error('Request timed out');
+        }
         throw err;
     }
 }
@@ -133,7 +166,6 @@ const fetchWithProxy = async (url: string, options?: RequestInit, skipCache: boo
   if (isGet && !skipCache) {
     const cached = apiCache.get(url);
     if (cached && Date.now() < cached.expiry) {
-      // Return a deep copy to prevent mutation of cached data
       return JSON.parse(JSON.stringify(cached.data)); 
     }
   }
@@ -145,11 +177,15 @@ const fetchWithProxy = async (url: string, options?: RequestInit, skipCache: boo
     const proxiesToTry = getShuffledProxies(method);
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      // Check for user cancellation before retry
+      if (options?.signal?.aborted) {
+          throw new DOMException('Aborted', 'AbortError');
+      }
+
       const provider = proxiesToTry[attempt % proxiesToTry.length];
       
       try {
         const separator = url.includes('?') ? '&' : '?';
-        // Cache buster only used if skipping internal cache to force fresh proxy fetch
         const cbParam = skipCache ? `${separator}cb=${Date.now()}` : '';
         const targetUrl = provider(url + cbParam);
         
@@ -157,14 +193,13 @@ const fetchWithProxy = async (url: string, options?: RequestInit, skipCache: boo
            const backoff = 1000 * Math.pow(2, attempt) + (Math.random() * 500);
            await wait(backoff);
         }
+        
+        // Check again after wait
+        if (options?.signal?.aborted) {
+            throw new DOMException('Aborted', 'AbortError');
+        }
 
-        const response = await fetchWithTimeout(targetUrl, {
-          ...options,
-          headers: {
-              ...HEADERS,
-              ...options?.headers
-          }
-        });
+        const response = await fetchWithTimeout(targetUrl, options);
 
         if (response.status === 429) {
           console.warn(`Rate limit hit (429) on proxy ${attempt}. Retrying...`);
@@ -186,6 +221,12 @@ const fetchWithProxy = async (url: string, options?: RequestInit, skipCache: boo
 
         const text = await response.text();
         
+        // CRITICAL FIX: Proxies often return HTML error pages (Gateway Timeout etc) with 200 OK status.
+        // We must validate that the response is actually JSON before proceeding.
+        if (text.trim().startsWith('<')) {
+            throw new Error('Received HTML instead of JSON (Proxy Error Page)');
+        }
+
         try {
           const json = JSON.parse(text);
           if (json.error) throw new Error(`Reddit API Error: ${json.message || json.error}`);
@@ -198,7 +239,6 @@ const fetchWithProxy = async (url: string, options?: RequestInit, skipCache: boo
               expiry: Date.now() + getCacheTTL(url)
             });
             
-            // Limit cache size (LRU-ish: delete oldest if too big)
             if (apiCache.size > 100) {
                 const oldestKey = apiCache.keys().next().value;
                 if (oldestKey) apiCache.delete(oldestKey);
@@ -207,13 +247,21 @@ const fetchWithProxy = async (url: string, options?: RequestInit, skipCache: boo
 
           return json;
         } catch (e) {
-          throw new Error('Received invalid JSON data (likely HTML error page).');
+          // If response was 200 but text isn't JSON, it's likely a proxy error page or rate limit HTML
+          throw new Error('Received invalid JSON data');
         }
 
       } catch (error: any) {
-        if (error.message.includes('Reddit Error') || error.status === 403 || error.status === 404) {
+        // Critical: Do not retry if the user aborted the request
+        if (error.name === 'AbortError' || (options?.signal && options.signal.aborted)) {
+            throw error;
+        }
+
+        // Don't retry 404s (content actually missing)
+        if (error.status === 404) {
              throw error;
         }
+        
         console.warn(`Attempt ${attempt + 1} failed: ${error.message}`);
         lastError = error;
       }
@@ -226,32 +274,34 @@ const fetchWithProxy = async (url: string, options?: RequestInit, skipCache: boo
 // --- API Methods ---
 
 export const fetchFeed = async (
-  type: 'popular' | 'all' | 'subreddit' | 'search',
-  subreddit?: string,
+  type: 'popular' | 'all' | 'subreddit' | 'search' | 'user',
+  target?: string, 
   after: string | null = null,
   followedSubs: string[] = [],
   searchQuery?: string,
   sort: SortOption = 'hot',
   time: TopTimeOption = 'day',
   limit: number = 25,
-  skipCache: boolean = false
+  skipCache: boolean = false,
+  signal?: AbortSignal
 ): Promise<{ posts: RedditPost[]; after: string | null }> => {
   let url = '';
   
   if (type === 'search' && searchQuery) {
     const searchSort = sort === 'rising' ? 'relevance' : sort;
     
-    if (subreddit) {
-        url = `${BASE_URL}/r/${subreddit}/search.json?q=${encodeURIComponent(searchQuery)}&restrict_sr=on&sort=${searchSort}&limit=${limit}&raw_json=1`;
+    if (target) {
+        url = `${BASE_URL}/r/${target}/search.json?q=${encodeURIComponent(searchQuery)}&restrict_sr=on&sort=${searchSort}&limit=${limit}&raw_json=1`;
     } else {
         url = `${BASE_URL}/search.json?q=${encodeURIComponent(searchQuery)}&sort=${searchSort}&limit=${limit}&raw_json=1`;
     }
-
+  } else if (type === 'user' && target) {
+    url = `${BASE_URL}/user/${target}/submitted.json?limit=${limit}&raw_json=1&sort=${sort}`;
   } else {
     let path = '';
     if (type === 'popular') path = '/r/popular';
     else if (type === 'all') path = '/r/all';
-    else if (type === 'subreddit' && subreddit) path = `/r/${subreddit}`;
+    else if (type === 'subreddit' && target) path = `/r/${target}`;
     
     url = `${BASE_URL}${path}/${sort}.json?limit=${limit}&raw_json=1`;
   }
@@ -265,7 +315,7 @@ export const fetchFeed = async (
   }
 
   try {
-    const data = await fetchWithProxy(url, undefined, skipCache);
+    const data = await fetchWithProxy(url, { signal }, skipCache);
     
     if (!data || !data.data || !data.data.children) {
         return { posts: [], after: null };
@@ -276,15 +326,31 @@ export const fetchFeed = async (
       after: data.data.after,
     };
   } catch (error) {
-    console.error("Failed to fetch feed", error);
     throw error;
   }
 };
 
-export const fetchComments = async (permalink: string): Promise<(RedditComment | RedditMore)[]> => {
-  const url = `${BASE_URL}${permalink.replace(/\/$/, '')}.json?raw_json=1`;
+export const fetchUserDetails = async (username: string, signal?: AbortSignal): Promise<RedditUserAbout | null> => {
+    const url = `${BASE_URL}/user/${username}/about.json?raw_json=1`;
+    try {
+        const data = await fetchWithProxy(url, { signal });
+        if (data && data.data) {
+            return data.data;
+        }
+        return null;
+    } catch (error) {
+        console.error("Failed to fetch user details", error);
+        return null;
+    }
+};
+
+export const fetchComments = async (permalink: string, sort: CommentSortOption = 'confidence', signal?: AbortSignal): Promise<(RedditComment | RedditMore)[]> => {
+  // Ensure we strip trailing slashes and append .json correctly
+  const cleanLink = permalink.replace(/\/$/, '');
+  const url = `${BASE_URL}${cleanLink}.json?raw_json=1&sort=${sort}`;
+  
   try {
-    const data = await fetchWithProxy(url);
+    const data = await fetchWithProxy(url, { signal });
     if (Array.isArray(data) && data.length > 1) {
       return data[1].data.children; 
     }
@@ -295,11 +361,11 @@ export const fetchComments = async (permalink: string): Promise<(RedditComment |
   }
 };
 
-export const fetchPostByPermalink = async (permalink: string): Promise<RedditPostData | null> => {
-  const url = `${BASE_URL}${permalink.replace(/\/$/, '')}.json?raw_json=1`;
+export const fetchPostByPermalink = async (permalink: string, signal?: AbortSignal): Promise<RedditPostData | null> => {
+  const cleanLink = permalink.replace(/\/$/, '');
+  const url = `${BASE_URL}${cleanLink}.json?raw_json=1`;
   try {
-    const data = await fetchWithProxy(url);
-    // Reddit API returns an array: [Listing(Post), Listing(Comments)]
+    const data = await fetchWithProxy(url, { signal });
     if (Array.isArray(data) && data.length > 0) {
       const postChildren = data[0].data?.children;
       if (postChildren && postChildren.length > 0 && postChildren[0].kind === 't3') {
@@ -313,8 +379,8 @@ export const fetchPostByPermalink = async (permalink: string): Promise<RedditPos
   }
 };
 
-export const fetchMoreChildren = async (linkId: string, children: string[]): Promise<any[]> => {
-    // POST requests are not cached
+export const fetchMoreChildren = async (linkId: string, children: string[], signal?: AbortSignal): Promise<any[]> => {
+    // Reddit API limits morechildren requests, so we chunk them
     const chunkSize = 20;
     const chunks = [];
     for (let i = 0; i < children.length; i += chunkSize) {
@@ -332,7 +398,8 @@ export const fetchMoreChildren = async (linkId: string, children: string[]): Pro
             const data = await fetchWithProxy(url, {
                 method: 'POST',
                 body: formData,
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                signal
             });
             
             if (data && data.json && data.json.data && data.json.data.things) {
@@ -348,10 +415,10 @@ export const fetchMoreChildren = async (linkId: string, children: string[]): Pro
     return results.flat();
 };
 
-export const searchSubreddits = async (query: string): Promise<string[]> => {
+export const searchSubreddits = async (query: string, signal?: AbortSignal): Promise<string[]> => {
   const url = `${BASE_URL}/subreddits/search.json?q=${encodeURIComponent(query)}&limit=5&raw_json=1`;
   try {
-    const data = await fetchWithProxy(url);
+    const data = await fetchWithProxy(url, { signal });
     if (!data || !data.data || !data.data.children) return [];
     return data.data.children.map((child: any) => child.data.display_name);
   } catch (error) {
@@ -359,10 +426,10 @@ export const searchSubreddits = async (query: string): Promise<string[]> => {
   }
 };
 
-export const fetchSubredditAbout = async (subreddit: string): Promise<SubredditAbout | null> => {
+export const fetchSubredditAbout = async (subreddit: string, signal?: AbortSignal): Promise<SubredditAbout | null> => {
   const url = `${BASE_URL}/r/${subreddit}/about.json?raw_json=1`;
   try {
-    const data = await fetchWithProxy(url);
+    const data = await fetchWithProxy(url, { signal });
     if (data && data.data) {
       return data.data;
     }

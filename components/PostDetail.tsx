@@ -1,9 +1,10 @@
 
+
 import React, { useEffect, useState, useRef, useMemo, memo, useContext, useCallback } from 'react';
-import { FilteredPost, RedditComment, RedditListing, CommentAnalysis, AIConfig, RedditMore, GalleryItem, FactCheckResult } from '../types';
+import { FilteredPost, RedditComment, RedditListing, CommentAnalysis, AIConfig, RedditMore, GalleryItem, FactCheckResult, CommentSortOption } from '../types';
 import { fetchComments, fetchMoreChildren } from '../services/redditService';
 import { analyzeCommentsForZen, factCheckComment } from '../services/aiService';
-import { X, ExternalLink, Loader2, ArrowBigUp, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MessageSquare, Images, Plus, MoreHorizontal, ShieldAlert, Eye, Captions, CornerDownRight, Maximize2, Share2, Clock, User, Scale } from 'lucide-react';
+import { X, ExternalLink, Loader2, ArrowBigUp, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MessageSquare, Images, Plus, MoreHorizontal, ShieldAlert, Eye, Captions, CornerDownRight, Maximize2, Share2, Clock, User, Scale, ListFilter } from 'lucide-react';
 import Hls from 'hls.js';
 import { formatDistanceToNow } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
@@ -16,6 +17,7 @@ interface PostDetailProps {
   post: FilteredPost;
   onClose: () => void;
   onNavigateSub?: (sub: string) => void;
+  onNavigateUser?: (user: string) => void;
   textSize: 'small' | 'medium' | 'large';
   aiConfig: AIConfig;
   onCommentsBlocked: (count: number) => void;
@@ -28,6 +30,7 @@ const CommentContext = React.createContext<{
     isCollapsed: (id: string) => boolean;
     setCollapsed: (id: string, state: boolean) => void;
     onFactCheck: (text: string, subreddit: string) => void;
+    onNavigateUser?: (user: string) => void;
 }>({ isCollapsed: () => false, setCollapsed: () => {}, onFactCheck: () => {} });
 
 // Generate consistent avatar color from username
@@ -138,6 +141,16 @@ const MarkdownRenderer: React.FC<{
       large: 'prose-lg'
   }[textSize];
 
+  const processedContent = useMemo(() => {
+    if (!content) return "";
+    // Auto-link r/sub or /r/sub patterns not already in links
+    // Simple heuristic: must be preceded by start of string or whitespace
+    return content.replace(/(^|[\s])(\/?r\/[A-Za-z0-9_]+)\b/g, (match, prefix, sub) => {
+        const href = sub.startsWith('/') ? sub : `/${sub}`;
+        return `${prefix}[${sub}](${href})`;
+    });
+  }, [content]);
+
   return (
     <div className={`prose prose-stone dark:prose-invert ${proseClass} max-w-none break-words leading-relaxed opacity-90`}>
       <ReactMarkdown 
@@ -182,7 +195,7 @@ const MarkdownRenderer: React.FC<{
             blockquote: ({node, ...props}) => <blockquote {...props} className="border-l-4 border-emerald-500/30 pl-3 py-1 my-2 text-stone-500 dark:text-stone-400 italic bg-stone-50 dark:bg-stone-800/20 rounded-r" />,
         }}
       >
-        {content}
+        {processedContent}
       </ReactMarkdown>
     </div>
   );
@@ -337,7 +350,7 @@ const CommentNode: React.FC<{
     subreddit: string;
     onInternalLinkClick?: (url: string) => void;
 }> = memo(({ comment, depth = 0, onNavigateSub, textSize, opAuthor, toxicityAnalysis, linkId, subreddit, onInternalLinkClick }) => {
-  const { isCollapsed, setCollapsed: setGlobalCollapsed, onFactCheck } = useContext(CommentContext);
+  const { isCollapsed, setCollapsed: setGlobalCollapsed, onFactCheck, onNavigateUser } = useContext(CommentContext);
   
   // Initialize state from context to survive unmounts
   const [collapsed, setCollapsed] = useState(() => isCollapsed(comment.data.id));
@@ -493,7 +506,15 @@ const CommentNode: React.FC<{
             </div>
 
             <div className="flex items-center gap-1.5 text-xs text-stone-500 dark:text-stone-400 overflow-hidden flex-wrap">
-                 <span className={`font-bold truncate ${isOp ? 'text-blue-600 dark:text-blue-400' : 'text-stone-700 dark:text-stone-300'} ${collapsed ? 'text-stone-500' : ''}`}>
+                 <span 
+                    className={`font-bold truncate ${isOp ? 'text-blue-600 dark:text-blue-400' : 'text-stone-700 dark:text-stone-300'} ${collapsed ? 'text-stone-500' : ''} hover:underline cursor-pointer`}
+                    onClick={(e) => {
+                        if (onNavigateUser && !collapsed) {
+                            e.stopPropagation();
+                            onNavigateUser(data.author);
+                        }
+                    }}
+                 >
                     {data.author}
                  </span>
                  {isOp && <span className="text-[9px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-1 rounded border border-blue-100 dark:border-blue-900/50">OP</span>}
@@ -669,11 +690,12 @@ const CommentNode: React.FC<{
   );
 });
 
-const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, textSize, aiConfig, onCommentsBlocked, onImageClick, onInternalLinkClick }) => {
+const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, onNavigateUser, textSize, aiConfig, onCommentsBlocked, onImageClick, onInternalLinkClick }) => {
   const [comments, setComments] = useState<(RedditComment | RedditMore)[]>([]);
   const [loading, setLoading] = useState(true);
   const [analyzingComments, setAnalyzingComments] = useState(false);
   const [commentAnalysisMap, setCommentAnalysisMap] = useState<Record<string, CommentAnalysis>>({});
+  const [commentSort, setCommentSort] = useState<CommentSortOption>('confidence');
   
   // Fact Check State
   const [isFactChecking, setIsFactChecking] = useState(false);
@@ -724,8 +746,9 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
   const contextValue = useMemo(() => ({
       isCollapsed,
       setCollapsed,
-      onFactCheck: handleFactCheck
-  }), [isCollapsed, setCollapsed, handleFactCheck]);
+      onFactCheck: handleFactCheck,
+      onNavigateUser
+  }), [isCollapsed, setCollapsed, handleFactCheck, onNavigateUser]);
 
   const [hasSubtitles, setHasSubtitles] = useState(false);
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
@@ -741,7 +764,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
     const loadComments = async () => {
       setLoading(true);
       // fetchComments returns a flat array of 'more' and 't1' objects at root
-      const data = await fetchComments(post.permalink);
+      const data = await fetchComments(post.permalink, commentSort);
       setComments(data);
       setLoading(false);
       
@@ -771,7 +794,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
       }
     };
     loadComments();
-  }, [post.permalink, aiConfig]);
+  }, [post.permalink, aiConfig, commentSort]);
 
   // Handle Video Playback
   useEffect(() => {
@@ -1040,8 +1063,18 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                                 {post.subreddit}
                             </button>
                             <div className="text-xs text-stone-500 dark:text-stone-400 truncate flex items-center gap-1.5 leading-tight opacity-80">
-                                <span className="hidden sm:inline">Posted by u/{post.author}</span>
-                                <span className="sm:hidden">u/{post.author}</span>
+                                <span className="hidden sm:inline">Posted by</span>
+                                <span 
+                                    className="hover:underline cursor-pointer hover:text-stone-800 dark:hover:text-stone-200"
+                                    onClick={(e) => {
+                                        if (onNavigateUser) {
+                                            e.stopPropagation();
+                                            onNavigateUser(post.author);
+                                        }
+                                    }}
+                                >
+                                    u/{post.author}
+                                </span>
                                 <span className="text-stone-300 dark:text-stone-700">•</span>
                                 <span className="shrink-0">{formatDistanceToNow(new Date(post.created_utc * 1000)).replace('about ', '').replace(' hours', 'h')} ago</span>
                             </div>
@@ -1145,6 +1178,24 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, t
                          <h3 className="font-bold text-lg text-stone-800 dark:text-stone-200">
                              Discussion
                          </h3>
+                         <div className="relative group">
+                             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-stone-100 dark:bg-stone-800/80 border border-stone-200 dark:border-stone-700 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors cursor-pointer">
+                                 <ListFilter size={14} />
+                                 <select 
+                                     value={commentSort} 
+                                     onChange={(e) => setCommentSort(e.target.value as CommentSortOption)}
+                                     className="appearance-none bg-transparent border-none p-0 pr-4 focus:ring-0 cursor-pointer text-stone-700 dark:text-stone-200 font-semibold"
+                                 >
+                                     <option value="confidence">Best</option>
+                                     <option value="top">Top</option>
+                                     <option value="new">New</option>
+                                     <option value="controversial">Controversial</option>
+                                     <option value="old">Old</option>
+                                     <option value="qa">Q&A</option>
+                                 </select>
+                                 <ChevronDown size={14} className="absolute right-3 pointer-events-none text-stone-400" />
+                             </div>
+                         </div>
                      </div>
 
                     {analyzingComments && (

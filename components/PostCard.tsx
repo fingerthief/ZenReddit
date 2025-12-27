@@ -1,4 +1,5 @@
 
+
 import React, { useMemo, useState } from 'react';
 import { FilteredPost, GalleryItem, ViewMode } from '../types';
 import { MessageSquare, ArrowBigUp, Image as ImageIcon, CirclePlay, Layers, ExternalLink, Maximize2, Minimize2, Share2, Check, Tag } from 'lucide-react';
@@ -9,6 +10,7 @@ interface PostCardProps {
   isSeen?: boolean;
   onClick: (post: FilteredPost) => void;
   onNavigateSub?: (sub: string) => void;
+  onNavigateUser?: (user: string) => void;
   onImageClick?: (items: GalleryItem[], initialIndex: number) => void;
   viewMode?: ViewMode;
 }
@@ -58,7 +60,7 @@ const FlairBadge: React.FC<{ text: string; bgColor?: string; textColor?: 'dark' 
   );
 };
 
-const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNavigateSub, onImageClick, viewMode = 'card' }) => {
+const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNavigateSub, onNavigateUser, onImageClick, viewMode = 'card' }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showCopied, setShowCopied] = useState(false);
   
@@ -374,6 +376,18 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
                             r/{post.subreddit}
                         </span>
                         <span className="text-stone-300 dark:text-stone-700 shrink-0">•</span>
+                        <span 
+                            className="hover:text-stone-800 dark:hover:text-stone-300 cursor-pointer"
+                            onClick={(e) => {
+                                if (onNavigateUser) {
+                                    e.stopPropagation();
+                                    onNavigateUser(post.author);
+                                }
+                            }}
+                        >
+                            u/{post.author}
+                        </span>
+                        <span className="text-stone-300 dark:text-stone-700 shrink-0">•</span>
                         <span className="shrink-0">{formatDistanceToNow(new Date(post.created_utc * 1000), { addSuffix: false }).replace('about ', '').replace(' hours', 'h').replace('less than a minute', 'now')}</span>
                     </div>
                     
@@ -420,6 +434,18 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
                     }}
                 >
                     r/{post.subreddit}
+                </span>
+                <span className="text-stone-300 dark:text-stone-600">•</span>
+                <span 
+                    className="hover:text-stone-800 dark:hover:text-stone-200 cursor-pointer hover:underline transition-colors"
+                    onClick={(e) => {
+                        if (onNavigateUser) {
+                            e.stopPropagation();
+                            onNavigateUser(post.author);
+                        }
+                    }}
+                >
+                    u/{post.author}
                 </span>
                 <span className="text-stone-300 dark:text-stone-600">•</span>
                 <span>{formatDistanceToNow(new Date(post.created_utc * 1000))} ago</span>

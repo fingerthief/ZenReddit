@@ -127,6 +127,16 @@ export interface SubredditAbout {
   created_utc: number;
 }
 
+export interface RedditUserAbout {
+  name: string;
+  created_utc: number;
+  link_karma: number;
+  comment_karma: number;
+  total_karma: number;
+  icon_img: string;
+  snoovatar_img?: string;
+}
+
 // App State Types
 
 export interface FilteredPost extends RedditPostData {
@@ -135,7 +145,7 @@ export interface FilteredPost extends RedditPostData {
   zenScore?: number; // 0-100, where 100 is pure zen, 0 is pure rage
 }
 
-export type FeedType = 'popular' | 'all' | 'subreddit' | 'search';
+export type FeedType = 'popular' | 'all' | 'subreddit' | 'search' | 'user';
 export type ViewMode = 'card' | 'compact';
 
 export interface GalleryItem {
@@ -152,6 +162,7 @@ export interface GalleryItem {
 // Sorting Types
 export type SortOption = 'hot' | 'new' | 'top' | 'rising';
 export type TopTimeOption = 'hour' | 'day' | 'week' | 'month' | 'year' | 'all';
+export type CommentSortOption = 'confidence' | 'top' | 'new' | 'controversial' | 'old' | 'qa';
 
 // AI Configuration Types
 export type AIProvider = 'openrouter';

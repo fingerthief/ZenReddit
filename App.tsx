@@ -5,10 +5,11 @@ import PostCard from './components/PostCard';
 import PostDetail from './components/PostDetail';
 import ImageViewer from './components/ImageViewer';
 import SettingsModal from './components/SettingsModal';
-import ScanningVisualizer from './components/ScanningVisualizer';
+import ScanningVisualizer, { LoadingPhase } from './components/ScanningVisualizer';
 import QuickSubSwitcher from './components/QuickSubSwitcher';
 import LazyRender from './components/LazyRender';
 import SubredditHeader from './components/SubredditHeader';
+import UserProfile from './components/UserProfile';
 import MobileBottomNav from './components/MobileBottomNav';
 import { FeedType, FilteredPost, RedditPostData, AIConfig, SortOption, TopTimeOption, CachedAnalysis, GalleryItem, ViewMode } from './types';
 import { fetchFeed, fetchPostByPermalink } from './services/redditService';
@@ -91,8 +92,7 @@ const App: React.FC = () => {
 
   // Data State
   const [posts, setPosts] = useState<FilteredPost[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
+  const [loadingPhase, setLoadingPhase] = useState<LoadingPhase>('idle');
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
@@ -305,21 +305,10 @@ const App: React.FC = () => {
       // Pattern: /r/{sub}/comments/{id}/{slug}/...
       const postMatch = path.match(/^\/r\/([^/]+)\/comments\/([^/]+)/i);
       if (postMatch) {
-          // It's a post link. We need to fetch it and open the modal.
-          // Note: We might be already in a modal. Replacing the content is fine.
-          
-          // Show a temporary loading state for the user feedback?
-          // Since we don't have a global loader, we can just fetch and set.
-          // Ideally we would show a toast or loader. For now, let's just fetch.
-          
           try {
               const postData = await fetchPostByPermalink(path);
               if (postData) {
                   const filteredPost: FilteredPost = { ...postData, zenScore: 50 }; // Default zen score as we haven't analyzed it yet
-                  
-                  // Analyze single post on the fly? Or just show it? 
-                  // Let's just show it to be fast.
-                  
                   handlePostClick(filteredPost);
               }
           } catch (e) {
@@ -358,6 +347,7 @@ const App: React.FC = () => {
         return;
     }
     
+    // Abort previous request if any
     if (abortControllerRef.current) {
         abortControllerRef.current.abort();
     }
@@ -380,6 +370,9 @@ const App: React.FC = () => {
     // Scroll back to top on navigate
     if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
   };
+
+  const handlePostNavigateSub = (sub: string) => handleNavigate('subreddit', sub);
+  const handlePostNavigateUser = (user: string) => handleNavigate('user', user);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -445,10 +438,8 @@ const App: React.FC = () => {
       touchStartRef.current = null;
   };
 
-  const handlePostNavigateSub = (sub: string) => handleNavigate('subreddit', sub);
-
   const loadPosts = useCallback(async (isLoadMore = false, forceRefresh = false) => {
-    if ((loading || analyzing) && isLoadMore) return;
+    if ((loadingPhase !== 'idle') && isLoadMore) return;
     
     const controller = new AbortController();
 
@@ -462,10 +453,10 @@ const App: React.FC = () => {
             setPosts([]);
             setAfter(null);
         }
-        setLoading(true);
+        setLoadingPhase('fetching');
         setError(null);
     } else {
-        setAnalyzing(true);
+        setLoadingPhase('analyzing');
     }
 
     try {
@@ -482,7 +473,8 @@ const App: React.FC = () => {
         currentSort,
         currentTopTime,
         pageSize,
-        forceRefresh
+        forceRefresh,
+        controller.signal // PASS SIGNAL HERE
       );
       
       if (controller.signal.aborted) return;
@@ -493,11 +485,13 @@ const App: React.FC = () => {
 
       if (rawPosts.length === 0) {
           if (abortControllerRef.current === controller) {
-             if (!isLoadMore) setLoading(false);
-             setAnalyzing(false);
+             setLoadingPhase('idle');
           }
           return;
       }
+
+      // Phase 2: Analyzing
+      if (!isLoadMore) setLoadingPhase('analyzing');
 
       const postsToAnalyze: RedditPostData[] = [];
       const newCache = { ...analysisCache };
@@ -527,6 +521,11 @@ const App: React.FC = () => {
           }
       }
 
+      // Phase 3: Filtering
+      if (!isLoadMore) setLoadingPhase('filtering');
+      // Artificial short delay to let user see "filtering" step visually if needed
+      if (!isLoadMore && postsToAnalyze.length > 0) await new Promise(r => setTimeout(r, 600));
+
       const finalPosts = postsWithCache.map((p: any) => {
            const fresh = newAnalysisResults.find(r => r.id === p.id);
            if (fresh) return { ...p, ...fresh };
@@ -545,16 +544,17 @@ const App: React.FC = () => {
       setPosts(prev => isLoadMore ? [...prev, ...filtered] : filtered);
 
     } catch (err: any) {
-        if (err.name !== 'AbortError' && !controller.signal.aborted) {
-             setError(err.message || "Failed to load feed");
+        // IGNORE ABORT ERRORS
+        if (err.name === 'AbortError' || controller.signal.aborted) {
+             return;
         }
+        setError(err.message || "Failed to load feed");
     } finally {
         if (abortControllerRef.current === controller) {
-            setLoading(false);
-            setAnalyzing(false);
+            setLoadingPhase('idle');
         }
     }
-  }, [loading, analyzing, currentFeed, currentSub, after, followedSubs, currentSearchQuery, currentSort, currentTopTime, pageSize, analysisCache, aiConfig, isRefreshing]);
+  }, [loadingPhase, currentFeed, currentSub, after, followedSubs, currentSearchQuery, currentSort, currentTopTime, pageSize, analysisCache, aiConfig, isRefreshing]);
 
   useEffect(() => {
       loadPosts(false);
@@ -564,7 +564,7 @@ const App: React.FC = () => {
   }, [currentFeed, currentSub, currentSearchQuery, currentSort, currentTopTime, pageSize, aiConfig.provider, aiConfig.openRouterModel, aiConfig.customInstructions, followedSubs]); 
 
   useEffect(() => {
-      if (!observerTarget.current || loading || analyzing || !after) return;
+      if (!observerTarget.current || loadingPhase !== 'idle' || !after) return;
       
       const observer = new IntersectionObserver(entries => {
           if (entries[0].isIntersecting) {
@@ -577,7 +577,7 @@ const App: React.FC = () => {
       
       observer.observe(observerTarget.current);
       return () => observer.disconnect();
-  }, [observerTarget, loading, analyzing, after, loadPosts]);
+  }, [observerTarget, loadingPhase, after, loadPosts]);
 
   // Mobile Bottom Nav Handler
   const handleMobileTabChange = (tab: 'home' | 'explore' | 'settings') => {
@@ -595,6 +595,8 @@ const App: React.FC = () => {
   const scrollToTop = () => {
       mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const isLoading = loadingPhase !== 'idle';
 
   return (
     <div 
@@ -674,7 +676,7 @@ const App: React.FC = () => {
                         <Search className="h-5 w-5 text-stone-400 group-focus-within:text-emerald-500 transition-colors duration-300" />
                     </div>
                     
-                    {currentSub && searchRestricted && (
+                    {currentSub && searchRestricted && currentFeed !== 'user' && (
                         <div className="flex items-center gap-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-md text-sm font-medium animate-fade-in whitespace-nowrap border border-emerald-200 dark:border-emerald-800/50 mr-1 shrink-0 max-w-[120px] sm:max-w-[200px]">
                             <span className="truncate">r/{currentSub}</span>
                             <button 
@@ -684,6 +686,12 @@ const App: React.FC = () => {
                             >
                                 <X size={14} />
                             </button>
+                        </div>
+                    )}
+
+                    {currentFeed === 'user' && currentSub && (
+                        <div className="flex items-center gap-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-md text-sm font-medium animate-fade-in whitespace-nowrap border border-emerald-200 dark:border-emerald-800/50 mr-1 shrink-0 max-w-[120px] sm:max-w-[200px]">
+                             <span className="truncate">u/{currentSub}</span>
                         </div>
                     )}
                     
@@ -709,6 +717,11 @@ const App: React.FC = () => {
                     isFollowed={followedSubs.includes(currentSub)}
                     onToggleFollow={() => handleToggleFollow(currentSub)}
                 />
+            )}
+
+            {/* User Profile Header */}
+            {currentFeed === 'user' && currentSub && (
+                <UserProfile username={currentSub} />
             )}
 
             {/* Toolbar */}
@@ -769,7 +782,7 @@ const App: React.FC = () => {
 
                     <button 
                         onClick={() => loadPosts(false, true)} 
-                        className={`p-2 rounded-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-all duration-200 shrink-0 shadow-sm btn-press ${loading ? 'animate-spin' : ''}`}
+                        className={`p-2 rounded-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-all duration-200 shrink-0 shadow-sm btn-press ${isLoading ? 'animate-spin' : ''}`}
                         title="Refresh"
                     >
                         <RefreshCw size={18} className="text-stone-500 dark:text-stone-400" />
@@ -778,9 +791,10 @@ const App: React.FC = () => {
             </div>
 
             {/* Content Area */}
-            {loading && posts.length === 0 ? (
-                <div className={viewMode === 'card' ? "columns-1 md:columns-2 xl:columns-3 gap-6" : "flex flex-col gap-3 max-w-4xl mx-auto"}>
-                    {[1,2,3,4,5,6].map(i => <PostSkeleton key={i} viewMode={viewMode} />)}
+            {isLoading && posts.length === 0 ? (
+                // Initial Load - Full Visualizer
+                <div className="flex flex-col items-center justify-center min-h-[50vh]">
+                     <ScanningVisualizer phase={loadingPhase} />
                 </div>
             ) : error ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center animate-list-enter">
@@ -791,7 +805,7 @@ const App: React.FC = () => {
                 </div>
             ) : (
                 <>
-                    {posts.length === 0 && !loading && !analyzing ? (
+                    {posts.length === 0 && !isLoading ? (
                         <div className="flex flex-col items-center justify-center py-20 text-center animate-list-enter">
                             <TriangleAlert size={48} className="text-stone-300 mb-4" />
                             <h3 className="text-xl font-medium text-stone-600 dark:text-stone-400">No Posts Found</h3>
@@ -815,6 +829,7 @@ const App: React.FC = () => {
                                             isSeen={!!seenPosts[post.id]}
                                             onClick={handlePostClick}
                                             onNavigateSub={handlePostNavigateSub}
+                                            onNavigateUser={handlePostNavigateUser}
                                             onImageClick={handleGalleryClick}
                                             viewMode={viewMode}
                                         />
@@ -824,10 +839,10 @@ const App: React.FC = () => {
                         </div>
                     )}
                     
-                    {/* Loader / Scanner at bottom */}
+                    {/* Loader / Scanner at bottom for pagination */}
                     <div ref={observerTarget} className="py-8 flex flex-col items-center justify-center min-h-[100px] w-full">
-                        {(loading || analyzing) && (
-                            analyzing ? <ScanningVisualizer mode="compact" /> : <Loader2 className="animate-spin text-stone-400" size={32} />
+                        {isLoading && posts.length > 0 && (
+                             <ScanningVisualizer mode="compact" phase={loadingPhase} />
                         )}
                     </div>
                 </>
@@ -878,6 +893,7 @@ const App: React.FC = () => {
             post={selectedPost} 
             onClose={handlePostClose} 
             onNavigateSub={handlePostNavigateSub}
+            onNavigateUser={handlePostNavigateUser}
             textSize={textSize}
             aiConfig={aiConfig}
             onCommentsBlocked={handleCommentsBlocked}
