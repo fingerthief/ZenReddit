@@ -67,7 +67,7 @@ const PostSkeleton: React.FC<{ viewMode: ViewMode }> = React.memo(({ viewMode })
     );
 });
 
-export default function App() {
+const App: React.FC = () => {
   // Navigation State
   const [currentFeed, setCurrentFeed] = useState<FeedType>(() => loadFromStorage('zen_last_feed', 'popular'));
   const [currentSub, setCurrentSub] = useState<string | undefined>(() => loadFromStorage('zen_last_sub', undefined));
@@ -679,7 +679,7 @@ export default function App() {
       <main 
         id="main-scroll"
         ref={mainScrollRef}
-        className="flex-1 h-full overflow-y-auto overflow-x-hidden w-full relative z-10 bg-stone-100 dark:bg-stone-950 scroll-smooth pb-16 md:pb-0"
+        className="flex-1 h-full overflow-y-auto w-full relative z-10 bg-stone-100 dark:bg-stone-950 scroll-smooth pb-16 md:pb-0"
         style={{ 
             transform: `translateY(${pullY}px)`, 
             transition: isPulling ? 'none' : 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)' 
@@ -687,7 +687,7 @@ export default function App() {
       >
          <div className="max-w-[1800px] mx-auto px-2 pt-20 md:pt-8 md:px-6 pb-20 md:pb-8">
             {/* Search Bar (Desktop Only) */}
-            <form onSubmit={handleSearchSubmit} className="hidden md:block relative mb-6 group max-w-3xl mx-auto xl:max-w-none transform transition-all duration-300 hover:scale-[1.01]">
+            <form onSubmit={handleSearchSubmit} className="hidden md:block relative mb-6 group max-w-3xl mx-auto transform transition-all duration-300 hover:scale-[1.01]">
                 <div className="relative flex items-center w-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl shadow-sm group-focus-within:shadow-md focus-within:ring-2 focus-within:ring-emerald-500/30 focus-within:border-emerald-500 transition-all overflow-hidden">
                     <div className="pl-4 pr-2 flex items-center pointer-events-none shrink-0">
                         <Search className="h-5 w-5 text-stone-400 group-focus-within:text-emerald-500 transition-colors duration-300" />
@@ -818,41 +818,97 @@ export default function App() {
                     <CloudOff size={48} className="text-stone-300 mb-4" />
                     <h3 className="text-xl font-medium text-stone-600 dark:text-stone-400">Connection Error</h3>
                     <p className="text-stone-500 dark:text-stone-500 mt-2 mb-6 max-w-sm">{error}</p>
-                    <button onClick={() => loadPosts(false, true)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors shadow-md active:scale-95">
-                        Retry Connection
-                    </button>
+                    <button onClick={() => loadPosts(false, true)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 btn-press">Try Again</button>
                 </div>
             ) : (
-                <div className={`w-full ${viewMode === 'card' ? 'columns-1 md:columns-2 lg:columns-3 gap-6 space-y-6' : 'flex flex-col gap-2'}`}>
-                    {posts.map(post => (
-                        <PostCard
-                            key={post.id}
-                            post={post}
-                            isSeen={!!seenPosts[post.id]}
-                            onClick={handlePostClick}
-                            onNavigateSub={handlePostNavigateSub}
-                            onNavigateUser={handlePostNavigateUser}
-                            onImageClick={handleGalleryClick}
-                            viewMode={viewMode}
-                        />
-                    ))}
+                <>
+                    {posts.length === 0 && !isLoading ? (
+                        <div className="flex flex-col items-center justify-center py-20 text-center animate-list-enter">
+                            <TriangleAlert size={48} className="text-stone-300 mb-4" />
+                            <h3 className="text-xl font-medium text-stone-600 dark:text-stone-400">No Posts Found</h3>
+                            <p className="text-stone-500 dark:text-stone-500 mt-2 max-w-sm">
+                                Try adjusting your filters or checking a different subreddit. 
+                                If you have "Strict" filtering on, try relaxing it in settings.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className={viewMode === 'card' ? "columns-1 md:columns-2 xl:columns-3 gap-6" : "flex flex-col gap-3 max-w-4xl mx-auto pb-4"}>
+                            {posts.map((post, index) => (
+                                <LazyRender 
+                                    key={post.id} 
+                                    className="break-inside-avoid mb-6" 
+                                    minHeight={viewMode === 'compact' ? 100 : 300}
+                                    rootMargin="800px"
+                                >
+                                    <div className="animate-list-enter" style={{ animationDelay: `${Math.min(index % 10, 5) * 50}ms` }}>
+                                        <PostCard 
+                                            post={post} 
+                                            isSeen={!!seenPosts[post.id]}
+                                            onClick={handlePostClick}
+                                            onNavigateSub={handlePostNavigateSub}
+                                            onNavigateUser={handlePostNavigateUser}
+                                            onImageClick={handleGalleryClick}
+                                            viewMode={viewMode}
+                                        />
+                                    </div>
+                                </LazyRender>
+                            ))}
+                        </div>
+                    )}
                     
-                    {/* Infinite Scroll Marker */}
-                    <div ref={observerTarget} className="h-10 w-full flex items-center justify-center p-4">
-                        {(loadingPhase === 'fetching' || loadingPhase === 'analyzing') && posts.length > 0 && (
-                            <Loader2 className="animate-spin text-emerald-500" />
+                    {/* Loader / Scanner at bottom for pagination */}
+                    <div ref={observerTarget} className="py-8 flex flex-col items-center justify-center min-h-[100px] w-full">
+                        {isLoading && posts.length > 0 && (
+                             <ScanningVisualizer mode="compact" phase={loadingPhase} />
                         )}
                     </div>
-                </div>
+                </>
             )}
          </div>
       </main>
 
-      {/* Modals & Overlays */}
+      {/* Mobile Bottom Navigation */}
+      <MobileBottomNav 
+        activeTab={mobileActiveTab}
+        onTabChange={handleMobileTabChange}
+        onScrollTop={scrollToTop}
+        isScrolled={isScrolled}
+      />
+
+      {/* Mobile Explore/Sub Switcher (Triggered by Explore Tab) */}
+      {mobileExploreOpen && (
+          <div className="md:hidden">
+              <QuickSubSwitcher 
+                followedSubs={followedSubs}
+                onNavigate={handleNavigate}
+                onFollow={handleFollow}
+                currentFeed={currentFeed}
+                currentSub={currentSub}
+                forceOpen={true}
+                onClose={() => {
+                    setMobileExploreOpen(false);
+                    setMobileActiveTab('home');
+                }}
+              />
+          </div>
+      )}
+      
+      {/* Desktop Quick Switcher FAB (Hidden on Mobile now) */}
+      <div className="hidden md:block">
+        <QuickSubSwitcher 
+            followedSubs={followedSubs}
+            onNavigate={handleNavigate}
+            onFollow={handleFollow}
+            currentFeed={currentFeed}
+            currentSub={currentSub}
+        />
+      </div>
+
+      {/* Modals */}
       {selectedPost && (
           <PostDetail 
             post={selectedPost} 
-            onClose={handlePostClose}
+            onClose={handlePostClose} 
             onNavigateSub={handlePostNavigateSub}
             onNavigateUser={handlePostNavigateUser}
             textSize={textSize}
@@ -865,15 +921,18 @@ export default function App() {
 
       {viewingGallery && (
           <ImageViewer 
-            items={viewingGallery.items} 
-            initialIndex={viewingGallery.index} 
+            items={viewingGallery.items}
+            initialIndex={viewingGallery.index}
             onClose={handleGalleryClose} 
           />
       )}
 
       <SettingsModal 
-        isOpen={settingsOpen} 
-        onClose={() => setSettingsOpen(false)} 
+        isOpen={settingsOpen}
+        onClose={() => {
+            setSettingsOpen(false);
+            setMobileActiveTab('home');
+        }}
         config={aiConfig}
         onSave={handleSaveSettings}
         pageSize={pageSize}
@@ -884,28 +943,14 @@ export default function App() {
         blockedCommentCount={blockedCommentCount}
       />
 
-      <QuickSubSwitcher 
-          followedSubs={followedSubs}
-          onNavigate={handleNavigate}
-          onFollow={handleFollow}
-          currentFeed={currentFeed}
-          currentSub={currentSub}
-          forceOpen={mobileExploreOpen}
-          onClose={() => setMobileExploreOpen(false)}
-      />
-
+      {/* Onboarding Modal */}
       <OnboardingModal 
-        isOpen={showOnboarding} 
-        onClose={handleCloseOnboarding} 
-      />
-
-      <MobileBottomNav 
-        activeTab={mobileActiveTab} 
-        onTabChange={handleMobileTabChange}
-        onScrollTop={scrollToTop}
-        isScrolled={isScrolled}
+        isOpen={showOnboarding}
+        onClose={handleCloseOnboarding}
       />
 
     </div>
   );
 };
+
+export default App;

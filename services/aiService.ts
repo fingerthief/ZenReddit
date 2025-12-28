@@ -1,5 +1,6 @@
 
 import { RedditPostData, AIConfig, RedditComment, CommentAnalysis, FactCheckResult } from "../types";
+import { GoogleGenAI } from "@google/genai";
 
 export interface AnalysisResult {
   id: string;
@@ -13,63 +14,12 @@ const cleanJsonString = (str: string) => {
     return str.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
 };
 
-const DEFAULT_MODEL = 'meta-llama/llama-3-8b-instruct:free';
-
-// --- Helper for OpenRouter API Calls ---
-
-const callOpenRouter = async (
-    apiKey: string,
-    model: string,
-    systemPrompt: string,
-    userContent: string,
-    jsonMode: boolean = true
-) => {
-    try {
-        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${apiKey}`,
-                "Content-Type": "application/json",
-                "HTTP-Referer": window.location.origin,
-                "X-Title": "ZenReddit"
-            },
-            body: JSON.stringify({
-                model: model,
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: userContent }
-                ],
-                response_format: jsonMode ? { type: "json_object" } : undefined
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error(`OpenRouter API Error: ${response.status} ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        const content = data.choices?.[0]?.message?.content;
-
-        if (!content) throw new Error("No content returned from AI");
-
-        return content;
-    } catch (error) {
-        console.error("OpenRouter Call Failed:", error);
-        throw error;
-    }
-};
-
-// --- Post Analysis ---
+const PROMPT_MODEL_ID = 'gemini-2.0-flash-lite-preview-02-05';
+// We need a model that supports search grounding for fact checking
+const FACT_CHECK_MODEL_ID = 'gemini-2.0-flash-lite-preview-02-05'; 
 
 export const analyzePostsForZen = async (posts: RedditPostData[], config?: AIConfig): Promise<AnalysisResult[]> => {
   if (posts.length === 0) return [];
-
-  // Use config key. If no key is provided, we cannot analyze.
-  const apiKey = config?.openRouterKey;
-
-  if (!apiKey) {
-      return fallbackResult(posts);
-  }
 
   // Minimized payload
   const postsPayload = posts.map(p => ({
@@ -95,31 +45,101 @@ export const analyzePostsForZen = async (posts: RedditPostData[], config?: AICon
     - isRageBait: boolean (true if zenScore < ${threshold})
   `;
 
-  try {
-      const content = await callOpenRouter(
-          apiKey,
-          config?.openRouterModel || DEFAULT_MODEL,
-          systemPrompt,
-          JSON.stringify(postsPayload)
-      );
+  // Logic: Use OpenRouter IF key is explicitly provided in config.
+  // Otherwise, use process.env.API_KEY as a Google GenAI key.
+  
+  if (config?.openRouterKey) {
+     return analyzeWithOpenRouter(postsPayload, systemPrompt, config.openRouterKey, config.openRouterModel, threshold);
+  } else if (process.env.API_KEY) {
+     return analyzeWithGoogleGenAI(postsPayload, systemPrompt, process.env.API_KEY, threshold);
+  } else {
+     return fallbackResult(posts);
+  }
+};
+
+const analyzeWithGoogleGenAI = async (
+    payload: any, 
+    systemPrompt: string, 
+    apiKey: string,
+    threshold: number
+): Promise<AnalysisResult[]> => {
+    try {
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await ai.models.generateContent({
+            model: PROMPT_MODEL_ID,
+            contents: JSON.stringify(payload),
+            config: {
+                systemInstruction: systemPrompt,
+                responseMimeType: 'application/json'
+            }
+        });
+
+        const text = response.text;
+        if (!text) throw new Error("No text returned from Gemini");
+        
+        const parsed = JSON.parse(text);
+        const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.data);
+        
+        if (!Array.isArray(results)) throw new Error("Invalid structure from Gemini");
+
+        return results.map((r: any) => ({
+            id: r.id,
+            isRageBait: typeof r.isRageBait === 'boolean' ? r.isRageBait : (r.zenScore < threshold),
+            zenScore: typeof r.zenScore === 'number' ? r.zenScore : 50,
+            reason: r.reason || "AI analysis"
+        }));
+
+    } catch (error) {
+        console.error("Gemini Analysis Failed:", error);
+        return fallbackResult(payload);
+    }
+}
+
+const analyzeWithOpenRouter = async (
+    payload: any, 
+    systemPrompt: string, 
+    apiKey: string, 
+    model: string | undefined, 
+    threshold: number
+): Promise<AnalysisResult[]> => {
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": window.location.origin, 
+          "X-Title": "ZenReddit"
+        },
+        body: JSON.stringify({
+          model: model || 'meta-llama/llama-3-8b-instruct:free',
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: JSON.stringify(payload) }
+          ],
+          response_format: { type: "json_object" } 
+        })
+      });
+
+      if (!response.ok) throw new Error(`API Error: ${response.status}`);
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content;
+      
+      if (!content) throw new Error("No content");
 
       let parsed;
       try {
           parsed = JSON.parse(cleanJsonString(content));
       } catch (e) {
           console.warn("Invalid JSON from AI", content);
-          return fallbackResult(posts);
+          return fallbackResult(payload);
       }
 
-      // Handle both { results: [...] } and direct array [...]
       const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.data);
 
-      if (!Array.isArray(results)) {
-           console.warn("AI response did not contain an array", parsed);
-           return fallbackResult(posts);
-      }
+      if (!Array.isArray(results)) return fallbackResult(payload);
 
-      // Map back to ensure IDs exist
       return results.map((r: any) => ({
           id: r.id,
           isRageBait: typeof r.isRageBait === 'boolean' ? r.isRageBait : (r.zenScore < threshold),
@@ -128,10 +148,10 @@ export const analyzePostsForZen = async (posts: RedditPostData[], config?: AICon
       }));
 
   } catch (error) {
-      // Quietly fail to fallback
-      return fallbackResult(posts);
+      console.error("OpenRouter Analysis Failed:", error);
+      return fallbackResult(payload);
   }
-};
+}
 
 const fallbackResult = (posts: any[]): AnalysisResult[] => {
     return posts.map(p => ({
@@ -149,7 +169,7 @@ export const analyzeCommentsForZen = async (
   config?: AIConfig,
   context?: { title: string; subreddit: string; selftext?: string }
 ): Promise<CommentAnalysis[]> => {
-  if (comments.length === 0 || !config?.openRouterKey) return [];
+  if (comments.length === 0) return [];
 
   const payload = comments.slice(0, 15).map(c => {
     let repliesContext: string[] = [];
@@ -180,113 +200,191 @@ export const analyzeCommentsForZen = async (
     ${contextStr}
 
     Instructions:
-    1. **Toxicity**: Flag genuine abuse, hate, or harm. Ignore friendly banter.
-    2. **Fact Checkability**: Determine if the comment contains verifiable factual claims (statistics, historical events, science, news).
+    1. **Toxicity**: Flag genuine abuse, hate, or harm. Ignore friendly banter ("lol I hate you") or dramatic slang ("I'm dying").
+    2. **Fact Checkability**: Determine if the comment contains verifiable factual claims (statistics, historical events, scientific assertions, specific news).
        - Set "isFactCheckable": true if it contains checkable facts.
-       - Set "isFactCheckable": false if it is opinion, anecdote, or joke.
+       - Set "isFactCheckable": false if it is pure opinion ("I like this"), personal anecdote ("I went there"), or a joke.
 
     Return JSON: { "results": [{ "id": "string", "isToxic": boolean, "reason": "string", "isFactCheckable": boolean }] }
   `;
 
-  try {
-      const content = await callOpenRouter(
-          config.openRouterKey,
-          config.openRouterModel || DEFAULT_MODEL,
-          systemPrompt,
-          JSON.stringify(payload)
-      );
+  if (config?.openRouterKey) {
+      // Use OpenRouter
+      try {
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+            "Authorization": `Bearer ${config.openRouterKey}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": window.location.origin, 
+            "X-Title": "ZenReddit"
+            },
+            body: JSON.stringify({
+            model: config.openRouterModel || 'meta-llama/llama-3-8b-instruct:free',
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: JSON.stringify(payload) }
+            ],
+            response_format: { type: "json_object" } 
+            })
+        });
 
-      const parsed = JSON.parse(cleanJsonString(content));
-      const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.data);
-      
-      if (Array.isArray(results)) {
-          return results.map((r: any) => ({
-              id: r.id,
-              isToxic: !!r.isToxic,
-              reason: r.reason,
-              isFactCheckable: !!r.isFactCheckable
-          }));
+        if (!response.ok) return [];
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content;
+        if (!content) return [];
+
+        const parsed = JSON.parse(cleanJsonString(content));
+        const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.data);
+        
+        if (Array.isArray(results)) {
+            return results.map((r: any) => ({
+                id: r.id,
+                isToxic: !!r.isToxic,
+                reason: r.reason,
+                isFactCheckable: !!r.isFactCheckable
+            }));
+        }
+        return [];
+    } catch (e) {
+        console.warn("OpenRouter Comment analysis error", e);
+        return [];
+    }
+  } else if (process.env.API_KEY) {
+      // Use Google GenAI
+      try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const response = await ai.models.generateContent({
+            model: PROMPT_MODEL_ID,
+            contents: JSON.stringify(payload),
+            config: {
+                systemInstruction: systemPrompt,
+                responseMimeType: 'application/json'
+            }
+        });
+
+        const text = response.text;
+        if (!text) return [];
+        
+        const parsed = JSON.parse(text);
+        const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.data);
+        
+        if (Array.isArray(results)) {
+            return results.map((r: any) => ({
+                id: r.id,
+                isToxic: !!r.isToxic,
+                reason: r.reason,
+                isFactCheckable: !!r.isFactCheckable
+            }));
+        }
+        return [];
+      } catch (e) {
+          console.warn("Gemini Comment analysis error", e);
+          return [];
       }
-      return [];
-  } catch (e) {
-      console.warn("Comment analysis error", e);
-      return [];
   }
+
+  return [];
 };
 
 // --- Fact Checking ---
 
 export const factCheckComment = async (
     commentBody: string, 
-    subreddit: string,
-    config: AIConfig
+    subreddit: string
 ): Promise<FactCheckResult> => {
+    const apiKey = process.env.API_KEY;
     
-    // Require OpenRouter Key
-    if (!config?.openRouterKey) {
+    // Fallback if no Google API key is present (Fact Checking requires Google Search Tool)
+    if (!apiKey) {
         return {
             verdict: 'Unverified',
-            explanation: "OpenRouter API Key required for fact checking.",
+            explanation: "API Key required for live fact checking.",
             sources: []
         };
     }
 
-    const systemPrompt = `
-        You are an expert fact-checker.
-        Your task is to verify the claims in a Reddit comment.
+    try {
+        const ai = new GoogleGenAI({ apiKey });
         
-        Analyze the text based on your internal knowledge base.
-        If the model you are using supports internet access, use it.
+        const prompt = `
+            Fact check the main claims in this Reddit comment from r/${subreddit}:
+            "${commentBody.substring(0, 500)}"
+            
+            1. Search for reliable sources to verify the claims.
+            2. Determine a verdict: "True", "False", "Misleading", "Opinion" (if subjective), or "Unverified".
+            3. Provide a concise explanation (max 2 sentences).
+            
+            Format your response exactly like this:
+            Verdict: [Verdict]
+            Explanation: [Explanation]
+        `;
+
+        const response = await ai.models.generateContent({
+            model: FACT_CHECK_MODEL_ID,
+            contents: prompt,
+            config: {
+                tools: [{ googleSearch: {} }],
+            }
+        });
+
+        // Parse sources from grounding chunks
+        const sources: { title: string; uri: string }[] = [];
+        const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
         
-        Return a JSON object matching this structure:
-        {
-          "verdict": "True" | "False" | "Misleading" | "Unverified" | "Opinion",
-          "explanation": "A concise 2-sentence explanation of why.",
-          "sources": [
-            { "title": "Source Name", "uri": "URL or Description" }
-          ]
+        if (chunks) {
+            chunks.forEach((chunk: any) => {
+                if (chunk.web?.uri && chunk.web?.title) {
+                    sources.push({
+                        title: chunk.web.title,
+                        uri: chunk.web.uri
+                    });
+                }
+            });
+        }
+
+        const text = response.text || "";
+        
+        let verdict: FactCheckResult['verdict'] = 'Unverified';
+        let explanation = text;
+
+        // More robust Regex parsing
+        const verdictRegex = /Verdict:\s*\*?([a-zA-Z]+)\*?/i;
+        const match = text.match(verdictRegex);
+
+        if (match && match[1]) {
+            const v = match[1].toLowerCase();
+            if (v === 'true') verdict = 'True';
+            else if (v === 'false') verdict = 'False';
+            else if (v === 'misleading') verdict = 'Misleading';
+            else if (v === 'opinion') verdict = 'Opinion';
+            else if (v === 'unverified') verdict = 'Unverified';
+        }
+
+        // Try to extract just the explanation part if the format was followed
+        const explRegex = /Explanation:\s*(.*)/is;
+        const explMatch = text.match(explRegex);
+        if (explMatch && explMatch[1]) {
+            explanation = explMatch[1].trim();
+        } else {
+             // Fallback: Remove the verdict line if found at the start
+             explanation = text.replace(verdictRegex, '').trim();
         }
         
-        If you cannot cite specific URLs, cite the entity or publication (e.g., "NASA Reports", "The New York Times").
-        If the comment is pure opinion and cannot be fact-checked, return "Opinion".
-    `;
-
-    const userPrompt = `
-        Subreddit: r/${subreddit}
-        Comment: "${commentBody.substring(0, 1000)}"
-    `;
-
-    try {
-        const content = await callOpenRouter(
-            config.openRouterKey,
-            config.openRouterModel || DEFAULT_MODEL,
-            systemPrompt,
-            userPrompt
-        );
-
-        const parsed = JSON.parse(cleanJsonString(content));
-        
-        // Sanitize result
-        let verdict: FactCheckResult['verdict'] = 'Unverified';
-        const rawVerdict = parsed.verdict?.toLowerCase() || '';
-        
-        if (rawVerdict.includes('true')) verdict = 'True';
-        else if (rawVerdict.includes('false')) verdict = 'False';
-        else if (rawVerdict.includes('mislead')) verdict = 'Misleading';
-        else if (rawVerdict.includes('opinion')) verdict = 'Opinion';
-        else if (rawVerdict.includes('unverified')) verdict = 'Unverified';
-
         return {
             verdict,
-            explanation: parsed.explanation || "No explanation provided.",
-            sources: Array.isArray(parsed.sources) ? parsed.sources : []
+            explanation: explanation,
+            sources: sources.filter((s, i, self) => 
+                self.findIndex((t) => t.uri === s.uri) === i
+            ).slice(0, 5) // Dedupe and limit
         };
 
     } catch (error) {
         console.error("Fact Check Failed:", error);
         return {
             verdict: 'Unverified',
-            explanation: "AI analysis failed to process this request.",
+            explanation: "Could not perform fact check at this time.",
             sources: []
         };
     }

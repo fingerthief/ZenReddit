@@ -733,14 +733,14 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, o
       setFactCheckResult(null);
 
       try {
-          const result = await factCheckComment(text, subreddit, aiConfig);
+          const result = await factCheckComment(text, subreddit);
           setFactCheckResult(result);
       } catch (e) {
           console.error("Fact check UI failed", e);
       } finally {
           setIsFactChecking(false);
       }
-  }, [aiConfig]);
+  }, []);
 
   // Stable context value
   const contextValue = useMemo(() => ({
@@ -1091,7 +1091,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, o
             {/* Content */}
             <div 
                 ref={scrollContainerRef}
-                className="flex-1 overflow-y-auto overflow-x-hidden bg-white dark:bg-stone-950 relative overscroll-contain"
+                className="flex-1 overflow-y-auto bg-white dark:bg-stone-950 relative"
             >
             <div className="md:p-8 md:pb-20 max-w-5xl mx-auto pb-safe">
                 {/* Post Title & Meta */}
