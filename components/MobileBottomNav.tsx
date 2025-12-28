@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Home, Search, Settings, ArrowUp } from 'lucide-react';
 
@@ -33,7 +32,15 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       {/* Gradient fade to ensure content doesn't look cut off */}
       <div className="absolute bottom-full left-0 right-0 h-8 bg-gradient-to-t from-stone-100/90 dark:from-stone-950/90 to-transparent pointer-events-none" />
       
-      <div className="bg-white/95 dark:bg-stone-900/95 backdrop-blur-xl border-t border-stone-200 dark:border-stone-800 shadow-lg pb-safe">
+      {/* 
+         Using inline style for paddingBottom is critical here.
+         It ensures that 'env(safe-area-inset-bottom)' is applied directly by the browser 
+         at runtime, bypassing any potential CSS purging or variable issues during the build process.
+      */}
+      <div 
+        className="bg-white/95 dark:bg-stone-900/95 backdrop-blur-xl border-t border-stone-200 dark:border-stone-800 shadow-lg"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
         <div className="flex items-center justify-around h-16">
           <button 
             onClick={() => handleTabClick('home')}
