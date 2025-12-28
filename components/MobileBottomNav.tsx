@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Home, Search, Settings, ArrowUp } from 'lucide-react';
 
@@ -32,7 +33,10 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       {/* Gradient fade to ensure content doesn't look cut off */}
       <div className="absolute bottom-full left-0 right-0 h-6 bg-gradient-to-t from-stone-100/80 dark:from-stone-950/80 to-transparent pointer-events-none" />
       
-      <div className="bg-white/90 dark:bg-stone-900/90 backdrop-blur-xl border-t border-stone-200 dark:border-stone-800 pb-safe">
+      <div 
+        className="bg-white/90 dark:bg-stone-900/90 backdrop-blur-xl border-t border-stone-200 dark:border-stone-800"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 20px)' }}
+      >
         <div className="flex items-center justify-around h-14">
           <button 
             onClick={() => handleTabClick('home')}
