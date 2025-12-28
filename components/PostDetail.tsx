@@ -733,14 +733,14 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, o
       setFactCheckResult(null);
 
       try {
-          const result = await factCheckComment(text, subreddit);
+          const result = await factCheckComment(text, subreddit, aiConfig);
           setFactCheckResult(result);
       } catch (e) {
           console.error("Fact check UI failed", e);
       } finally {
           setIsFactChecking(false);
       }
-  }, []);
+  }, [aiConfig]);
 
   // Stable context value
   const contextValue = useMemo(() => ({
