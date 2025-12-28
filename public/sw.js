@@ -1,10 +1,9 @@
-
-const CACHE_NAME = 'zen-reddit-v2';
+const CACHE_NAME = 'zen-reddit-v3';
 const URLS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icon.svg'
+  './',
+  'index.html',
+  'manifest.json',
+  'icon.svg'
 ];
 
 self.addEventListener('install', (event) => {
@@ -33,10 +32,12 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Only handle GET requests
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
 
+  // For API calls or external resources, use network-only but with a simple error fallback if needed
   if (url.origin !== self.location.origin || url.pathname.includes('/api/') || url.pathname.includes('.json')) {
      return;
   }
@@ -45,8 +46,9 @@ self.addEventListener('fetch', (event) => {
     caches.match(event.request)
       .then((response) => {
         return response || fetch(event.request).catch(() => {
+          // If both fail and it's a navigation request, return index.html
           if (event.request.mode === 'navigate') {
-            return caches.match('/');
+            return caches.match('index.html');
           }
         });
       })

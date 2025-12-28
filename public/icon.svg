@@ -4,12 +4,9 @@
       <stop offset="0" stop-color="#34d399"/>
       <stop offset="1" stop-color="#059669"/>
     </linearGradient>
-    <filter id="d" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-opacity="0.15"/>
-    </filter>
   </defs>
-  <rect width="512" height="512" rx="128" fill="url(#g)"/>
-  <g transform="translate(256 280)" fill="white" filter="url(#d)">
+  <rect width="512" height="512" fill="url(#g)"/>
+  <g transform="translate(256 280)" fill="white">
     <!-- Center Petal -->
     <path d="M0-160c-50 60-50 140 0 140s50-80 0-140z" opacity="0.95"/>
     <!-- Left Petal -->

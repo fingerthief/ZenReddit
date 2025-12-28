@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en" class="light">
   <head>
@@ -12,9 +11,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="ZenReddit">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/svg+xml" href="/icon.svg">
-    <link rel="apple-touch-icon" href="/icon.svg">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
+    <link rel="apple-touch-icon" href="icon.svg">
 
     <title>ZenReddit</title>
     
@@ -219,5 +218,14 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('SW registered!', reg))
+            .catch(err => console.log('SW registration failed', err));
+        });
+      }
+    </script>
   </body>
 </html>
