@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef, useMemo, memo, useContext, useCallback } from 'react';
 import { FilteredPost, RedditComment, RedditListing, CommentAnalysis, AIConfig, RedditMore, GalleryItem, FactCheckResult, CommentSortOption } from '../types';
 import { fetchComments, fetchMoreChildren } from '../services/redditService';
@@ -193,6 +192,8 @@ const MarkdownRenderer: React.FC<{
             td: ({node, ...props}) => <td {...props} className="px-3 py-2 border-t border-stone-100 dark:border-stone-800" />,
             // @ts-ignore
             blockquote: ({node, ...props}) => <blockquote {...props} className="border-l-4 border-emerald-500/30 pl-3 py-1 my-2 text-stone-500 dark:text-stone-400 italic bg-stone-50 dark:bg-stone-800/20 rounded-r" />,
+            // @ts-ignore
+            pre: ({node, ...props}) => <div className="overflow-x-auto my-2 bg-stone-100 dark:bg-stone-800 rounded-lg border border-stone-200 dark:border-stone-700"><pre {...props} className="p-3 text-xs" /></div>,
         }}
       >
         {processedContent}
@@ -1099,7 +1100,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, o
             {/* Content */}
             <div 
                 ref={scrollContainerRef}
-                className="flex-1 overflow-y-auto bg-white dark:bg-stone-950 relative"
+                className="flex-1 overflow-y-auto overflow-x-hidden bg-white dark:bg-stone-950 relative"
             >
             <div className="md:p-8 md:pb-20 max-w-5xl mx-auto pb-safe">
                 {/* Post Title & Meta */}

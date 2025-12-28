@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import PostCard from './components/PostCard';
@@ -157,451 +156,341 @@ const App: React.FC = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
   
   // Touch / Gestures state
-  const touchStartRef = useRef<{x: number, y: number} | null>(null);
-  const isAtTopRef = useRef(false);
-  const [pullY, setPullY] = useState(0);
-  const [isPulling, setIsPulling] = useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
+  const touchStartRef = useRef<{ x: number, y: number } | null>(null);
 
-  // --- Effects for Persistence ---
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
+    // Check first launch
+    const hasVisited = localStorage.getItem('zen_has_visited');
+    if (!hasVisited) {
+        setShowOnboarding(true);
+        localStorage.setItem('zen_has_visited', 'true');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
     localStorage.setItem('zen_theme', theme);
   }, [theme]);
 
-  // Onboarding Check
-  useEffect(() => {
-    const hasSeen = localStorage.getItem('zen_onboarding_seen');
-    if (!hasSeen) {
-        // Small delay to ensure app is loaded nicely behind it
-        const timer = setTimeout(() => setShowOnboarding(true), 1500);
-        return () => clearTimeout(timer);
-    }
-  }, []);
-
-  // Batch save effect for simple configs
-  useEffect(() => {
-    localStorage.setItem('zen_last_feed', JSON.stringify(currentFeed));
-    if (currentSub) localStorage.setItem('zen_last_sub', JSON.stringify(currentSub));
-    else localStorage.removeItem('zen_last_sub');
-    if (currentSearchQuery) localStorage.setItem('zen_last_search', JSON.stringify(currentSearchQuery));
-    localStorage.setItem('zen_sort', JSON.stringify(currentSort));
-    localStorage.setItem('zen_top_time', JSON.stringify(currentTopTime));
-    localStorage.setItem('zen_page_size', JSON.stringify(pageSize));
-    localStorage.setItem('zen_text_size', JSON.stringify(textSize));
-    localStorage.setItem('zen_view_mode', JSON.stringify(viewMode));
-    localStorage.setItem('zen_followed_subs', JSON.stringify(followedSubs));
-    localStorage.setItem('zen_ai_config', JSON.stringify(aiConfig));
-    localStorage.setItem('zen_blocked_count', JSON.stringify(blockedCount));
-    localStorage.setItem('zen_blocked_comment_count', JSON.stringify(blockedCommentCount));
-  }, [currentFeed, currentSub, currentSearchQuery, currentSort, currentTopTime, pageSize, textSize, viewMode, followedSubs, aiConfig, blockedCount, blockedCommentCount]);
-
-  // Debounced save for expensive objects (seenPosts, analysisCache)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-        try {
-            localStorage.setItem('zen_seen_posts', JSON.stringify(seenPosts));
-        } catch(e) {}
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [seenPosts]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-        try {
-            const now = Date.now();
-            const expiry = 7 * 24 * 60 * 60 * 1000;
-            const cleaned: Record<string, CachedAnalysis> = {};
-            const entries = Object.entries(analysisCache) as [string, CachedAnalysis][];
-            const startIndex = Math.max(0, entries.length - 500);
-            
-            for (let i = startIndex; i < entries.length; i++) {
-                const [key, val] = entries[i];
-                if (now - val.timestamp < expiry) {
-                    cleaned[key] = val;
-                }
-            }
-            localStorage.setItem('zen_analysis_cache', JSON.stringify(cleaned));
-        } catch (e) {}
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [analysisCache]);
-
+  // Handle browser back button
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
-      if (viewingGallery) setViewingGallery(null);
-      else if (selectedPost) setSelectedPost(null);
+        if (event.state) {
+            // Restore state from history
+            if (event.state.postId) {
+                // If we have a postId but no selectedPost, try to find it or fetch it
+                if (!selectedPost || selectedPost.id !== event.state.postId) {
+                    const found = posts.find(p => p.id === event.state.postId);
+                    if (found) setSelectedPost(found);
+                    else {
+                        // Optionally fetch single post if not in feed
+                        // For now we just go back to feed if not found
+                        window.history.replaceState(null, '');
+                    }
+                }
+            } else {
+                setSelectedPost(null);
+            }
+        } else {
+            setSelectedPost(null);
+        }
     };
+
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [selectedPost, viewingGallery]);
+  }, [posts, selectedPost]);
 
-  useEffect(() => {
-    if (currentFeed === 'search') {
-      setSearchInput(currentSearchQuery);
-    } else {
-      setSearchInput('');
-    }
-  }, [currentSearchQuery, currentFeed]);
-
-  useEffect(() => {
-      setSearchRestricted(true);
-  }, [currentSub]);
-
-  // Scroll Listener
-  useEffect(() => {
-      const scrollEl = mainScrollRef.current;
-      if (!scrollEl) return;
-      const handleScroll = () => {
-          setIsScrolled(scrollEl.scrollTop > 100);
-      };
-      scrollEl.addEventListener('scroll', handleScroll);
-      return () => scrollEl.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  // --- Handlers ---
-  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  const handleFollow = (sub: string) => !followedSubs.includes(sub) && setFollowedSubs(prev => [...prev, sub]);
-  const handleUnfollow = (sub: string) => setFollowedSubs(prev => prev.filter(s => s !== sub));
+  // Persist State
+  useEffect(() => { localStorage.setItem('zen_last_feed', currentFeed); }, [currentFeed]);
+  useEffect(() => { if(currentSub) localStorage.setItem('zen_last_sub', currentSub); }, [currentSub]);
+  useEffect(() => { if(currentSearchQuery) localStorage.setItem('zen_last_search', currentSearchQuery); }, [currentSearchQuery]);
+  useEffect(() => { localStorage.setItem('zen_sort', currentSort); }, [currentSort]);
+  useEffect(() => { localStorage.setItem('zen_top_time', currentTopTime); }, [currentTopTime]);
+  useEffect(() => { localStorage.setItem('zen_view_mode', viewMode); }, [viewMode]);
+  useEffect(() => { localStorage.setItem('zen_page_size', pageSize.toString()); }, [pageSize]);
+  useEffect(() => { localStorage.setItem('zen_text_size', textSize); }, [textSize]);
+  useEffect(() => { localStorage.setItem('zen_followed_subs', JSON.stringify(followedSubs)); }, [followedSubs]);
+  useEffect(() => { localStorage.setItem('zen_blocked_count', blockedCount.toString()); }, [blockedCount]);
+  useEffect(() => { localStorage.setItem('zen_blocked_comment_count', blockedCommentCount.toString()); }, [blockedCommentCount]);
+  useEffect(() => { localStorage.setItem('zen_ai_config', JSON.stringify(aiConfig)); }, [aiConfig]);
   
-  const handleToggleFollow = (sub: string) => {
-      if (followedSubs.includes(sub)) {
-          handleUnfollow(sub);
-      } else {
-          handleFollow(sub);
-      }
-  };
-
-  const handleSaveSettings = (config: AIConfig) => setAiConfig(config);
-
-  const handleCloseOnboarding = () => {
-      localStorage.setItem('zen_onboarding_seen', 'true');
-      setShowOnboarding(false);
-  };
-
-  const handlePostClick = useCallback((post: FilteredPost) => {
-      try { window.history.pushState({ postOpen: true }, '', null); } catch (e) {}
-      setSelectedPost(post);
-      setSeenPosts(prev => ({ ...prev, [post.id]: Date.now() }));
-  }, []);
-
-  // Helper to handle clicks on reddit links (subreddits, posts) from within comments/selftext
-  const handleInternalLinkClick = useCallback(async (url: string) => {
-      // 1. Clean URL to relative path
-      let path = url;
-      try {
-          // If it's a full URL, strip domain if it's reddit
-          if (url.startsWith('http')) {
-              const urlObj = new URL(url);
-              if (urlObj.hostname.includes('reddit.com') || urlObj.hostname.includes('redd.it')) {
-                  path = urlObj.pathname;
-              } else {
-                  // External link
-                  window.open(url, '_blank');
-                  return;
-              }
-          }
-      } catch (e) {
-          // invalid url, ignore
-          return;
-      }
-
-      // 2. Check for Subreddit: /r/subreddit
-      const subMatch = path.match(/^\/r\/([^/]+)\/?$/i);
-      if (subMatch) {
-          const subName = subMatch[1];
-          handleNavigate('subreddit', subName);
-          if (selectedPost) {
-             // If we are in a modal, we probably want to close it to see the feed
-             handlePostClose();
-          }
-          return;
-      }
-
-      // 3. Check for Post: /r/subreddit/comments/id/...
-      // Pattern: /r/{sub}/comments/{id}/{slug}/...
-      const postMatch = path.match(/^\/r\/([^/]+)\/comments\/([^/]+)/i);
-      if (postMatch) {
+  useEffect(() => {
+      // Debounced save for caches to avoid spamming storage
+      const timeout = setTimeout(() => {
           try {
-              const postData = await fetchPostByPermalink(path);
-              if (postData) {
-                  const filteredPost: FilteredPost = { ...postData, zenScore: 50 }; // Default zen score as we haven't analyzed it yet
-                  handlePostClick(filteredPost);
-              }
+            // Prune old seen posts
+            const now = Date.now();
+            const validSeen: Record<string, number> = {};
+            let changed = false;
+            Object.entries(seenPosts).forEach(([id, time]) => {
+                if ((now - time) < SEEN_EXPIRY_MS) {
+                    validSeen[id] = time;
+                } else {
+                    changed = true;
+                }
+            });
+            localStorage.setItem('zen_seen_posts', JSON.stringify(validSeen));
+            if (changed) setSeenPosts(validSeen);
+            
+            // Prune analysis cache (keep max 500 items)
+            const entries = Object.entries(analysisCache);
+            if (entries.length > 500) {
+                const pruned = Object.fromEntries(entries.slice(entries.length - 500));
+                localStorage.setItem('zen_analysis_cache', JSON.stringify(pruned));
+            } else {
+                localStorage.setItem('zen_analysis_cache', JSON.stringify(analysisCache));
+            }
           } catch (e) {
-              console.error("Failed to load linked post", e);
-              window.open(url, '_blank');
+              console.warn("Storage save failed", e);
           }
-          return;
-      }
+      }, 2000);
+      return () => clearTimeout(timeout);
+  }, [seenPosts, analysisCache]);
 
-      // Fallback
-      window.open(url, '_blank');
-  }, [selectedPost]);
-
-  const handleGalleryClick = useCallback((items: GalleryItem[], index: number) => {
-      try { window.history.pushState({ imageOpen: true }, '', null); } catch (e) {}
-      setViewingGallery({ items, index });
-  }, []);
-
-  const handlePostClose = () => {
-      if (window.history.state?.postOpen) try { window.history.back(); } catch(e) { setSelectedPost(null); }
-      else setSelectedPost(null);
-  };
-
-  const handleGalleryClose = () => {
-      if (window.history.state?.imageOpen) try { window.history.back(); } catch(e) { setViewingGallery(null); }
-      else setViewingGallery(null);
-  };
-
-  const handleCommentsBlocked = (count: number) => {
-      setBlockedCommentCount(prev => prev + count);
-  };
-
-  const handleNavigate = (type: FeedType, sub?: string, query?: string) => {
-    if (type === currentFeed && sub === currentSub && query === currentSearchQuery) {
-        setMobileExploreOpen(false);
-        return;
-    }
+  const loadFeed = useCallback(async (refresh = false, nextAfter: string | null = null) => {
+    if (loadingPhase !== 'idle' && !refresh && !nextAfter) return;
     
-    // Abort previous request if any
-    if (abortControllerRef.current) {
+    // Abort previous request if refreshing
+    if (refresh && abortControllerRef.current) {
         abortControllerRef.current.abort();
     }
-
-    setNavHistory(prev => [...prev, { feed: currentFeed, sub: currentSub, query: currentSearchQuery }]);
-    setCurrentFeed(type);
-    setCurrentSub(sub);
-    if (type === 'search' && query) {
-        setCurrentSearchQuery(query);
-    } else if (type !== 'search') {
-        setCurrentSearchQuery('');
-    }
-    
-    // UI Resets
-    setMobileExploreOpen(false);
-    if (selectedPost) setSelectedPost(null);
-    setViewingGallery(null);
-    setMobileActiveTab('home');
-    
-    // Scroll back to top on navigate
-    if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
-  };
-
-  const handlePostNavigateSub = (sub: string) => handleNavigate('subreddit', sub);
-  const handlePostNavigateUser = (user: string) => handleNavigate('user', user);
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchInput.trim()) {
-        const targetSub = searchRestricted ? currentSub : undefined;
-        handleNavigate('search', targetSub, searchInput.trim());
-    }
-  };
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-      if (viewingGallery || selectedPost || settingsOpen || mobileExploreOpen) return;
-      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      if (mainScrollRef.current) {
-          isAtTopRef.current = mainScrollRef.current.scrollTop <= 1;
-      }
-      setIsPulling(false); 
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchStartRef.current || viewingGallery || selectedPost || settingsOpen || mobileExploreOpen) return;
-    const currentY = e.touches[0].clientY;
-    const dy = currentY - touchStartRef.current.y;
-    const dx = e.touches[0].clientX - touchStartRef.current.x;
-
-    if (isAtTopRef.current && dy > 0 && Math.abs(dy) > Math.abs(dx)) {
-         const newPullY = Math.min(dy * 0.45, 150);
-         setPullY(newPullY);
-         setIsPulling(true);
-    }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-      if (!touchStartRef.current) return;
-      const startX = touchStartRef.current.x;
-      const startY = touchStartRef.current.y;
-      const endX = e.changedTouches[0].clientX;
-      const endY = e.changedTouches[0].clientY;
-      
-      setIsPulling(false);
-      
-      if (pullY > 60) { 
-          setPullY(60); 
-          setIsRefreshing(true);
-          loadPosts(false, true).finally(() => {
-              setIsRefreshing(false);
-              setPullY(0);
-          });
-      } else {
-          setPullY(0); 
-      }
-
-      // Swipe back navigation
-      if (pullY < 10 && startX < 40 && !viewingGallery && !selectedPost && !settingsOpen && !mobileExploreOpen) {
-          const dx = endX - startX;
-          const dy = Math.abs(endY - startY);
-          if (dx > 80 && dy < 60 && navHistory.length > 0) {
-              const prev = navHistory[navHistory.length - 1];
-              setNavHistory(prevH => prevH.slice(0, -1));
-              handleNavigate(prev.feed, prev.sub, prev.query);
-          }
-      }
-      
-      touchStartRef.current = null;
-  };
-
-  const loadPosts = useCallback(async (isLoadMore = false, forceRefresh = false) => {
-    if ((loadingPhase !== 'idle') && isLoadMore) return;
     
     const controller = new AbortController();
-
-    if (!isLoadMore) {
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-        }
-        abortControllerRef.current = controller;
-
-        if (!isRefreshing) {
-            setPosts([]);
-            setAfter(null);
-        }
-        setLoadingPhase('fetching');
-        setError(null);
-    } else {
-        setLoadingPhase('analyzing');
-    }
+    abortControllerRef.current = controller;
 
     try {
-      if (!isLoadMore) await new Promise(resolve => setTimeout(resolve, 50));
+      if (refresh) {
+          setLoadingPhase('fetching');
+          setIsRefreshing(true);
+      } else {
+          // Pagination loading
+      }
       
-      if (controller.signal.aborted) return;
+      setError(null);
 
-      const { posts: rawPostsData, after: newAfter } = await fetchFeed(
+      // Step 1: Fetch
+      const { posts: rawPosts, after: newAfter } = await fetchFeed(
         currentFeed, 
         currentSub, 
-        isLoadMore ? after : null,
+        nextAfter,
         followedSubs,
         currentSearchQuery,
         currentSort,
         currentTopTime,
         pageSize,
-        forceRefresh,
-        controller.signal // PASS SIGNAL HERE
+        refresh, // skip cache if refreshing
+        controller.signal
       );
       
-      if (controller.signal.aborted) return;
-
-      setAfter(newAfter);
-      
-      const rawPosts = rawPostsData.map(p => p.data);
-
-      if (rawPosts.length === 0) {
-          if (abortControllerRef.current === controller) {
-             setLoadingPhase('idle');
-          }
+      if (!rawPosts || rawPosts.length === 0) {
+          if (refresh) setPosts([]);
+          setAfter(null);
+          setLoadingPhase('idle');
+          setIsRefreshing(false);
           return;
       }
 
-      // Phase 2: Analyzing
-      if (!isLoadMore) setLoadingPhase('analyzing');
+      setAfter(newAfter);
+      
+      // Step 2: Identify unanalyzed posts
+      const unanalyzed = rawPosts.filter(p => !analysisCache[p.data.id]);
+      
+      // Identify valid cached posts
+      const cachedResults: FilteredPost[] = rawPosts
+        .filter(p => analysisCache[p.data.id])
+        .map(p => ({
+            ...p.data,
+            ...analysisCache[p.data.id],
+            zenScore: analysisCache[p.data.id].zenScore
+        }));
 
-      const postsToAnalyze: RedditPostData[] = [];
-      const newCache = { ...analysisCache };
-      let newAnalysisResults: AnalysisResult[] = [];
+      let newAnalyzedResults: AnalysisResult[] = [];
 
-      const postsWithCache = rawPosts.map(p => {
-          if (newCache[p.id]) {
-              return { ...p, ...newCache[p.id] };
-          } else {
-              postsToAnalyze.push(p);
-              return p; 
-          }
-      });
-
-      if (postsToAnalyze.length > 0) {
-          try {
-             newAnalysisResults = await analyzePostsForZen(postsToAnalyze, aiConfig);
-             
-             if (controller.signal.aborted) return;
-
-             newAnalysisResults.forEach(res => {
-                 newCache[res.id] = { ...res, timestamp: Date.now() };
-             });
-             setAnalysisCache(newCache);
-          } catch (e) {
-              console.warn("Analysis error", e);
-          }
+      // Step 3: Analyze only if needed
+      if (unanalyzed.length > 0) {
+          setLoadingPhase('analyzing');
+          const toAnalyze = unanalyzed.map(p => p.data);
+          
+          newAnalyzedResults = await analyzePostsForZen(toAnalyze, aiConfig);
+          
+          // Update Cache
+          setAnalysisCache(prev => {
+              const next = { ...prev };
+              newAnalyzedResults.forEach(r => {
+                  next[r.id] = {
+                      id: r.id,
+                      isRageBait: r.isRageBait,
+                      zenScore: r.zenScore,
+                      reason: r.reason,
+                      timestamp: Date.now()
+                  };
+              });
+              return next;
+          });
       }
 
-      // Phase 3: Filtering
-      if (!isLoadMore) setLoadingPhase('filtering');
-      // Artificial short delay to let user see "filtering" step visually if needed
-      if (!isLoadMore && postsToAnalyze.length > 0) await new Promise(r => setTimeout(r, 600));
-
-      const finalPosts = postsWithCache.map((p: any) => {
-           const fresh = newAnalysisResults.find(r => r.id === p.id);
-           if (fresh) return { ...p, ...fresh };
-           if (newCache[p.id]) return { ...p, ...newCache[p.id] };
-           return p;
+      // Step 4: Filter & Merge
+      setLoadingPhase('filtering');
+      
+      // Combine cached + newly analyzed
+      const analyzedMap = new Map<string, AnalysisResult>();
+      newAnalyzedResults.forEach(r => analyzedMap.set(r.id, r));
+      
+      const processedPosts: FilteredPost[] = rawPosts.map(p => {
+         const cached = analysisCache[p.data.id];
+         const fresh = analyzedMap.get(p.data.id);
+         
+         const analysis = fresh || cached || { isRageBait: false, zenScore: 50, reason: '', id: p.data.id };
+         
+         return {
+             ...p.data,
+             ...analysis,
+             isRageBait: analysis.isRageBait,
+             zenScore: analysis.zenScore
+         };
       });
 
-      const threshold = aiConfig.minZenScore ?? 50;
-      const filtered = finalPosts.filter((p: any) => (p.zenScore ?? 50) >= threshold);
-      
-      const blocked = finalPosts.length - filtered.length;
+      // Filter out rage bait based on user strictness preference (minZenScore handles threshold logic in AI, but we double check)
+      const visiblePosts = processedPosts.filter(p => !p.isRageBait);
+      const blocked = processedPosts.length - visiblePosts.length;
       if (blocked > 0) setBlockedCount(prev => prev + blocked);
 
-      if (controller.signal.aborted) return;
-
-      setPosts(prev => isLoadMore ? [...prev, ...filtered] : filtered);
+      if (refresh) {
+          setPosts(visiblePosts);
+          // Reset scroll
+          if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+      } else {
+          setPosts(prev => {
+              const ids = new Set(prev.map(p => p.id));
+              const uniqueNew = visiblePosts.filter(p => !ids.has(p.id));
+              return [...prev, ...uniqueNew];
+          });
+      }
 
     } catch (err: any) {
-        // IGNORE ABORT ERRORS
-        if (err.name === 'AbortError' || controller.signal.aborted) {
-             return;
-        }
-        setError(err.message || "Failed to load feed");
+      if (err.name !== 'AbortError') {
+          console.error(err);
+          setError(err.message || "Failed to load feed");
+      }
     } finally {
-        if (abortControllerRef.current === controller) {
-            setLoadingPhase('idle');
-        }
+      setLoadingPhase('idle');
+      setIsRefreshing(false);
+      abortControllerRef.current = null;
     }
-  }, [loadingPhase, currentFeed, currentSub, after, followedSubs, currentSearchQuery, currentSort, currentTopTime, pageSize, analysisCache, aiConfig, isRefreshing]);
+  }, [currentFeed, currentSub, currentSearchQuery, currentSort, currentTopTime, pageSize, followedSubs, aiConfig, analysisCache]);
 
+  // Initial Load & Dependencies
   useEffect(() => {
-      loadPosts(false);
-      return () => {
-          if (abortControllerRef.current) abortControllerRef.current.abort();
-      };
-  }, [currentFeed, currentSub, currentSearchQuery, currentSort, currentTopTime, pageSize, aiConfig.provider, aiConfig.openRouterModel, aiConfig.customInstructions, followedSubs]); 
+    loadFeed(true);
+  }, [currentFeed, currentSub, currentSort, currentTopTime, currentSearchQuery]); // Only re-load when feed params change
 
+  // Intersection Observer for Infinite Scroll
   useEffect(() => {
-      if (!observerTarget.current || loadingPhase !== 'idle' || !after) return;
-      
-      const observer = new IntersectionObserver(entries => {
-          if (entries[0].isIntersecting) {
-              loadPosts(true);
-          }
-      }, { 
-          threshold: 0.1,
-          root: mainScrollRef.current
-      });
-      
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting && after && loadingPhase === 'idle') {
+          loadFeed(false, after);
+        }
+      },
+      { threshold: 0.1, rootMargin: '400px' }
+    );
+
+    if (observerTarget.current) {
       observer.observe(observerTarget.current);
-      return () => observer.disconnect();
-  }, [observerTarget, loadingPhase, after, loadPosts]);
+    }
+
+    return () => observer.disconnect();
+  }, [after, loadingPhase, loadFeed]);
+
+  const handleNavigate = (type: FeedType, sub?: string, query?: string) => {
+    setNavHistory(prev => [...prev, { feed: currentFeed, sub: currentSub, query: currentSearchQuery }]);
+    
+    setCurrentFeed(type);
+    if (sub) setCurrentSub(sub);
+    else setCurrentSub(undefined);
+    
+    if (query) setCurrentSearchQuery(query);
+    else setCurrentSearchQuery('');
+    
+    // Mobile navigation logic
+    if (type === 'search') {
+        // handled in search submit
+    }
+    
+    // Update active tab logic for mobile nav
+    if (type === 'popular' || type === 'all') setMobileActiveTab('home');
+    if (type === 'subreddit') setMobileActiveTab('home');
+  };
+
+  const scrollToTop = () => {
+    if (mainScrollRef.current) {
+        mainScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handlePostClick = (post: FilteredPost) => {
+      setSelectedPost(post);
+      setSeenPosts(prev => ({ ...prev, [post.id]: Date.now() }));
+      
+      // Update URL/History without reload
+      const url = `/r/${post.subreddit}/comments/${post.id}`;
+      window.history.pushState({ postId: post.id }, '', url);
+  };
+
+  const handleCloseDetail = () => {
+      setSelectedPost(null);
+      // Go back in history to reset URL, or replace state
+      if (window.history.state && window.history.state.postId) {
+          window.history.back();
+      } else {
+          // Fallback if opened directly
+          window.history.replaceState(null, '', '/');
+      }
+  };
+
+  const handleFollow = (sub: string) => {
+      if (!followedSubs.includes(sub)) {
+          setFollowedSubs(prev => [...prev, sub]);
+      }
+  };
+
+  const handleUnfollow = (sub: string) => {
+      setFollowedSubs(prev => prev.filter(s => s !== sub));
+  };
+  
+  const handleInternalLink = (url: string) => {
+      // Parse reddit internal links
+      // Format: /r/subreddit/comments/id/... or /r/subreddit
+      const subMatch = url.match(/\/r\/([^/]+)/);
+      const sub = subMatch ? subMatch[1] : null;
+      
+      const commentMatch = url.match(/\/comments\/([^/]+)/);
+      const postId = commentMatch ? commentMatch[1] : null;
+      
+      if (postId && sub) {
+          // It's a post link. Since we don't have the full post object, we try to fetch it or navigate
+          // Ideally we fetch it quickly
+          fetchPostByPermalink(url).then(post => {
+              if (post) {
+                  const filtered: FilteredPost = { ...post, isRageBait: false, zenScore: 50 }; // optimistically neutral
+                  setSelectedPost(filtered);
+              }
+          });
+      } else if (sub) {
+          handleNavigate('subreddit', sub);
+          setSelectedPost(null);
+      }
+  };
 
   // Mobile Bottom Nav Handler
   const handleMobileTabChange = (tab: 'home' | 'explore' | 'settings') => {
       setMobileActiveTab(tab);
       if (tab === 'home') {
-          // If already on feed but scrolled, MobileBottomNav handles scroll top
-          // If on different feed, maybe reset? No, stay on current feed.
+          if (currentFeed === 'search') handleNavigate('popular');
       } else if (tab === 'explore') {
           setMobileExploreOpen(true);
       } else if (tab === 'settings') {
@@ -609,40 +498,39 @@ const App: React.FC = () => {
       }
   };
 
-  const scrollToTop = () => {
-      mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  // Pull to refresh logic for mobile (simplified)
+  const [pullY, setPullY] = useState(0);
+  
+  const handleTouchStart = (e: React.TouchEvent) => {
+      if (mainScrollRef.current && mainScrollRef.current.scrollTop === 0) {
+          touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      } else {
+          touchStartRef.current = null;
+      }
   };
 
-  const isLoading = loadingPhase !== 'idle';
+  const handleTouchMove = (e: React.TouchEvent) => {
+      if (!touchStartRef.current) return;
+      const y = e.touches[0].clientY;
+      const diff = y - touchStartRef.current.y;
+      if (diff > 0 && diff < 200) { // Limit pull distance
+          setPullY(diff);
+      }
+  };
+
+  const handleTouchEnd = () => {
+      if (pullY > 80) { // Threshold
+          loadFeed(true);
+      }
+      setPullY(0);
+      touchStartRef.current = null;
+  };
 
   return (
-    <div 
-        className="flex bg-stone-100 dark:bg-stone-950 h-screen w-full overflow-hidden font-sans text-stone-900 dark:text-stone-100 transition-colors" 
-        onTouchStart={handleTouchStart} 
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-    >
-      {/* Mobile Top Bar - Clean & Minimal */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-stone-100/90 dark:bg-stone-950/90 backdrop-blur-md pt-safe transition-transform duration-300">
-          <div className="flex items-center justify-between h-12 px-4 pb-2 pt-2">
-            <span className="font-semibold text-lg bg-clip-text text-transparent bg-gradient-to-r from-emerald-600 to-teal-500 flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)] animate-pulse"></span>
-                ZenReddit
-            </span>
-            <div className="flex items-center gap-2">
-                 <button 
-                    onClick={() => setViewMode(viewMode === 'card' ? 'compact' : 'card')}
-                    className="p-2 rounded-full text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-800 transition-colors"
-                >
-                    {viewMode === 'card' ? <List size={20} /> : <LayoutGrid size={20} />}
-                </button>
-            </div>
-          </div>
-      </div>
-
-      {/* Desktop Sidebar */}
-      <div className="hidden md:flex shrink-0 h-full w-64 z-20 shadow-lg">
-          <Sidebar 
+    <div className={`flex h-screen w-full bg-stone-100 dark:bg-black transition-colors duration-300 ${theme}`}>
+      {/* Sidebar (Desktop) */}
+      <div className="hidden md:flex md:w-64 shrink-0 h-full z-20 relative shadow-xl">
+        <Sidebar 
             currentFeed={currentFeed}
             currentSub={currentSub}
             onNavigate={handleNavigate}
@@ -650,291 +538,244 @@ const App: React.FC = () => {
             onFollow={handleFollow}
             onUnfollow={handleUnfollow}
             theme={theme}
-            toggleTheme={toggleTheme}
+            toggleTheme={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
             blockedCount={blockedCount}
             blockedCommentCount={blockedCommentCount}
             onOpenSettings={() => setSettingsOpen(true)}
-          />
+        />
       </div>
 
-      {/* Pull to Refresh Indicator */}
-      <div className="fixed top-24 left-0 right-0 md:left-64 z-0 flex justify-center pointer-events-none">
-         <div 
-             className="bg-white dark:bg-stone-800 p-2.5 rounded-full shadow-lg border border-stone-200 dark:border-stone-700 flex items-center justify-center transition-all duration-200 ease-out"
-             style={{ 
-                 opacity: Math.min(pullY / 40, 1), 
-                 transform: `scale(${Math.min(pullY/50, 1)}) translateY(${pullY * 0.2}px)`,
-                 visibility: pullY > 0 || isRefreshing ? 'visible' : 'hidden'
-             }}
-         >
-            <Loader2 
-                className={`text-emerald-500 ${isRefreshing ? 'animate-spin' : ''}`} 
-                size={24} 
-                style={{ transform: !isRefreshing ? `rotate(${pullY * 3}deg)` : 'none' }} 
-            />
-         </div>
-      </div>
-
-      {/* Main Content */}
-      <main 
-        id="main-scroll"
+      {/* Main Content Area */}
+      <div 
         ref={mainScrollRef}
-        className="flex-1 h-full overflow-y-auto w-full relative z-10 bg-stone-100 dark:bg-stone-950 scroll-smooth pb-16 md:pb-0"
-        style={{ 
-            transform: `translateY(${pullY}px)`, 
-            transition: isPulling ? 'none' : 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)' 
-        }}
+        className="flex-1 h-full overflow-y-auto overflow-x-hidden relative w-full scroll-smooth no-scrollbar md:custom-scrollbar"
+        id="main-scroll-container"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
-         <div className="max-w-[1800px] mx-auto px-2 pt-20 md:pt-8 md:px-6 pb-20 md:pb-8">
-            {/* Search Bar (Desktop Only) */}
-            <form onSubmit={handleSearchSubmit} className="hidden md:block relative mb-6 group max-w-3xl mx-auto transform transition-all duration-300 hover:scale-[1.01]">
-                <div className="relative flex items-center w-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl shadow-sm group-focus-within:shadow-md focus-within:ring-2 focus-within:ring-emerald-500/30 focus-within:border-emerald-500 transition-all overflow-hidden">
-                    <div className="pl-4 pr-2 flex items-center pointer-events-none shrink-0">
-                        <Search className="h-5 w-5 text-stone-400 group-focus-within:text-emerald-500 transition-colors duration-300" />
-                    </div>
-                    
-                    {currentSub && searchRestricted && currentFeed !== 'user' && (
-                        <div className="flex items-center gap-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-md text-sm font-medium animate-fade-in whitespace-nowrap border border-emerald-200 dark:border-emerald-800/50 mr-1 shrink-0 max-w-[120px] sm:max-w-[200px]">
-                            <span className="truncate">r/{currentSub}</span>
-                            <button 
-                                type="button" 
-                                onClick={() => setSearchRestricted(false)}
-                                className="hover:text-emerald-900 dark:hover:text-emerald-200 rounded-full p-0.5 shrink-0"
-                            >
-                                <X size={14} />
-                            </button>
-                        </div>
-                    )}
+          {/* Pull to refresh indicator */}
+          <div 
+            className="absolute top-0 left-0 right-0 flex justify-center items-center pointer-events-none transition-transform duration-200"
+            style={{ transform: `translateY(${pullY > 0 ? pullY / 2 : -50}px)`, opacity: pullY > 0 ? 1 : 0 }}
+          >
+              <div className="bg-white dark:bg-stone-800 p-2 rounded-full shadow-lg">
+                  <RefreshCw size={20} className={`text-emerald-500 ${pullY > 80 ? 'animate-spin' : ''} transition-transform`} style={{ transform: `rotate(${pullY * 2}deg)` }} />
+              </div>
+          </div>
 
-                    {currentFeed === 'user' && currentSub && (
-                        <div className="flex items-center gap-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-md text-sm font-medium animate-fade-in whitespace-nowrap border border-emerald-200 dark:border-emerald-800/50 mr-1 shrink-0 max-w-[120px] sm:max-w-[200px]">
-                             <span className="truncate">u/{currentSub}</span>
-                        </div>
-                    )}
-                    
-                    <input
-                        type="text"
-                        value={searchInput}
-                        onChange={(e) => setSearchInput(e.target.value)}
-                        onKeyDown={(e) => {
-                             if (e.key === 'Backspace' && searchInput === '' && currentSub && searchRestricted) {
-                                 setSearchRestricted(false);
-                             }
-                        }}
-                        placeholder={currentSub && searchRestricted ? "" : "Search Reddit..."}
-                        className="block w-full py-3 pr-4 bg-transparent border-none focus:ring-0 text-stone-900 dark:text-stone-100 placeholder-stone-400 leading-5 min-w-[50px]"
-                    />
+          <div className="max-w-4xl mx-auto pb-24 md:pb-10 pt-safe pl-safe pr-safe min-h-full">
+            
+            {/* Mobile Header */}
+            <div className="md:hidden sticky top-0 z-30 bg-white/80 dark:bg-stone-950/80 backdrop-blur-lg border-b border-stone-200 dark:border-stone-800 px-4 py-3 flex items-center justify-between mb-4 transition-all">
+                <div 
+                    className="flex items-center gap-2"
+                    onClick={() => {
+                        scrollToTop();
+                        if (currentFeed !== 'popular') handleNavigate('popular');
+                    }}
+                >
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-400 to-teal-500 shadow-lg shadow-emerald-500/30 flex items-center justify-center text-white font-bold text-lg">
+                        Z
+                    </div>
+                    <span className="font-semibold text-stone-800 dark:text-stone-100 tracking-tight">ZenReddit</span>
                 </div>
-            </form>
+                
+                <div className="flex items-center gap-2">
+                     <button 
+                        onClick={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
+                        className="p-2 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-600 dark:text-stone-400"
+                     >
+                         {theme === 'light' ? <div className="w-5 h-5 bg-stone-800 rounded-full" /> : <div className="w-5 h-5 bg-stone-200 rounded-full" />}
+                     </button>
+                </div>
+            </div>
 
             {/* Subreddit Header */}
             {currentFeed === 'subreddit' && currentSub && (
                 <SubredditHeader 
-                    subreddit={currentSub}
+                    subreddit={currentSub} 
                     isFollowed={followedSubs.includes(currentSub)}
-                    onToggleFollow={() => handleToggleFollow(currentSub)}
+                    onToggleFollow={() => followedSubs.includes(currentSub) ? handleUnfollow(currentSub) : handleFollow(currentSub)}
                 />
             )}
 
             {/* User Profile Header */}
             {currentFeed === 'user' && currentSub && (
-                <UserProfile username={currentSub} />
+                 <UserProfile username={currentSub} />
             )}
+            
+            {/* Sort Controls & Feed Title */}
+            <div className="flex items-center justify-between mb-6 px-4 md:px-0">
+                <div className="flex flex-col">
+                    <h2 className="text-xl md:text-2xl font-bold text-stone-800 dark:text-stone-100 capitalize flex items-center gap-2">
+                        {currentFeed === 'search' ? `Results: "${currentSearchQuery}"` : 
+                         currentFeed === 'subreddit' ? `r/${currentSub}` :
+                         currentFeed === 'user' ? `u/${currentSub}` :
+                         `${currentFeed} Posts`}
+                    </h2>
+                    {loadingPhase !== 'idle' && loadingPhase !== 'fetching' && (
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400 animate-pulse font-medium">
+                            {loadingPhase === 'analyzing' ? 'AI is scanning for toxicity...' : 'Filtering content...'}
+                        </p>
+                    )}
+                </div>
 
-            {/* Toolbar */}
-            <div className="flex items-center justify-between gap-4 mb-4 md:mb-6 max-w-3xl mx-auto xl:max-w-none pl-1">
-                <div className="flex-1 min-w-0 flex items-center gap-2 overflow-x-auto pb-2 hide-scrollbar">
-                    {/* Sort Buttons */}
-                    {(['hot', 'new', 'top', 'rising'] as SortOption[]).map((option) => (
-                        <button
-                        key={option}
-                        onClick={() => setCurrentSort(option)}
-                        className={`px-3 md:px-4 py-1.5 md:py-2 rounded-full text-xs md:text-sm font-medium transition-all duration-300 capitalize whitespace-nowrap btn-press shrink-0 ${
-                            currentSort === option 
-                            ? 'bg-stone-800 text-white dark:bg-stone-100 dark:text-stone-900 shadow-md transform scale-105' 
-                            : 'bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-400 border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800'
-                        }`}
-                        >
-                        {option}
+                <div className="flex items-center gap-2">
+                     {/* View Mode Toggle */}
+                     <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg p-1 flex items-center gap-1">
+                          <button 
+                             onClick={() => setViewMode('card')}
+                             className={`p-1.5 rounded ${viewMode === 'card' ? 'bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100' : 'text-stone-400 hover:text-stone-600'}`}
+                             title="Card View"
+                          >
+                              <LayoutGrid size={16} />
+                          </button>
+                          <button 
+                             onClick={() => setViewMode('compact')}
+                             className={`p-1.5 rounded ${viewMode === 'compact' ? 'bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100' : 'text-stone-400 hover:text-stone-600'}`}
+                             title="Compact View"
+                          >
+                              <List size={16} />
+                          </button>
+                     </div>
+
+                    {/* Sort Dropdown */}
+                    <div className="relative group z-10">
+                        <button className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors">
+                            <span className="capitalize">{currentSort}</span>
+                            <ChevronDown size={14} className="text-stone-400" />
                         </button>
-                    ))}
+                        
+                        <div className="absolute right-0 top-full mt-2 w-32 bg-white dark:bg-stone-900 rounded-xl shadow-lg border border-stone-100 dark:border-stone-800 overflow-hidden opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all transform origin-top-right">
+                             {['hot', 'new', 'top', 'rising'].map((sort) => (
+                                 <button
+                                    key={sort}
+                                    onClick={() => setCurrentSort(sort as SortOption)}
+                                    className={`w-full text-left px-4 py-2 text-sm hover:bg-stone-50 dark:hover:bg-stone-800 capitalize ${currentSort === sort ? 'text-emerald-600 font-bold' : 'text-stone-600 dark:text-stone-300'}`}
+                                 >
+                                     {sort}
+                                 </button>
+                             ))}
+                        </div>
+                    </div>
 
-                    {/* Top Time Select (Conditional) */}
                     {currentSort === 'top' && (
-                        <div className="relative shrink-0 animate-list-enter origin-left">
                         <select 
                             value={currentTopTime} 
                             onChange={(e) => setCurrentTopTime(e.target.value as TopTimeOption)}
-                            className="appearance-none bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-full pl-4 pr-8 py-1.5 md:py-2 text-xs md:text-sm font-medium text-stone-700 dark:text-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors"
+                            className="px-3 py-2 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg text-sm font-medium text-stone-700 dark:text-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors"
                         >
-                            <option value="hour">Now</option>
-                            <option value="day">Today</option>
+                            <option value="hour">Hour</option>
+                            <option value="day">Day</option>
                             <option value="week">Week</option>
                             <option value="month">Month</option>
                             <option value="year">Year</option>
                             <option value="all">All Time</option>
                         </select>
-                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-500 pointer-events-none" />
-                        </div>
                     )}
-                </div>
-
-                <div className="hidden md:flex items-center gap-2 shrink-0">
-                    <div className="flex bg-white dark:bg-stone-900 rounded-lg border border-stone-200 dark:border-stone-800 p-1 shrink-0 shadow-sm">
-                        <button 
-                            onClick={() => setViewMode('card')}
-                            className={`p-1.5 rounded-md transition-all duration-200 ${viewMode === 'card' ? 'bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-sm' : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}
-                            title="Card View"
-                        >
-                            <LayoutGrid size={18} />
-                        </button>
-                        <button 
-                            onClick={() => setViewMode('compact')}
-                            className={`p-1.5 rounded-md transition-all duration-200 ${viewMode === 'compact' ? 'bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-sm' : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}
-                            title="Compact View"
-                        >
-                            <List size={18} />
-                        </button>
-                    </div>
-
-                    <button 
-                        onClick={() => loadPosts(false, true)} 
-                        className={`p-2 rounded-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-all duration-200 shrink-0 shadow-sm btn-press ${isLoading ? 'animate-spin' : ''}`}
-                        title="Refresh"
-                    >
-                        <RefreshCw size={18} className="text-stone-500 dark:text-stone-400" />
-                    </button>
                 </div>
             </div>
 
-            {/* Content Area */}
-            {isLoading && posts.length === 0 ? (
-                // Initial Load - Full Visualizer
-                <div className="flex flex-col items-center justify-center min-h-[50vh]">
-                     <ScanningVisualizer phase={loadingPhase} />
-                </div>
-            ) : error ? (
-                <div className="flex flex-col items-center justify-center py-20 text-center animate-list-enter">
-                    <CloudOff size={48} className="text-stone-300 mb-4" />
-                    <h3 className="text-xl font-medium text-stone-600 dark:text-stone-400">Connection Error</h3>
-                    <p className="text-stone-500 dark:text-stone-500 mt-2 mb-6 max-w-sm">{error}</p>
-                    <button onClick={() => loadPosts(false, true)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 btn-press">Try Again</button>
-                </div>
-            ) : (
-                <>
-                    {posts.length === 0 && !isLoading ? (
-                        <div className="flex flex-col items-center justify-center py-20 text-center animate-list-enter">
-                            <TriangleAlert size={48} className="text-stone-300 mb-4" />
-                            <h3 className="text-xl font-medium text-stone-600 dark:text-stone-400">No Posts Found</h3>
-                            <p className="text-stone-500 dark:text-stone-500 mt-2 max-w-sm">
-                                Try adjusting your filters or checking a different subreddit. 
-                                If you have "Strict" filtering on, try relaxing it in settings.
-                            </p>
-                        </div>
-                    ) : (
-                        <div className={viewMode === 'card' ? "columns-1 md:columns-2 xl:columns-3 gap-6" : "flex flex-col gap-3 max-w-4xl mx-auto pb-4"}>
-                            {posts.map((post, index) => (
-                                <LazyRender 
-                                    key={post.id} 
-                                    className="break-inside-avoid mb-6" 
-                                    minHeight={viewMode === 'compact' ? 100 : 300}
-                                    rootMargin="800px"
-                                >
-                                    <div className="animate-list-enter" style={{ animationDelay: `${Math.min(index % 10, 5) * 50}ms` }}>
-                                        <PostCard 
-                                            post={post} 
-                                            isSeen={!!seenPosts[post.id]}
-                                            onClick={handlePostClick}
-                                            onNavigateSub={handlePostNavigateSub}
-                                            onNavigateUser={handlePostNavigateUser}
-                                            onImageClick={handleGalleryClick}
-                                            viewMode={viewMode}
-                                        />
-                                    </div>
-                                </LazyRender>
-                            ))}
-                        </div>
-                    )}
-                    
-                    {/* Loader / Scanner at bottom for pagination */}
-                    <div ref={observerTarget} className="py-8 flex flex-col items-center justify-center min-h-[100px] w-full">
-                        {isLoading && posts.length > 0 && (
-                             <ScanningVisualizer mode="compact" phase={loadingPhase} />
-                        )}
+            {/* Error State */}
+            {error && (
+                <div className="flex flex-col items-center justify-center py-12 px-4 text-center animate-fade-in">
+                    <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-full mb-4">
+                        <CloudOff className="text-red-500" size={32} />
                     </div>
-                </>
+                    <h3 className="text-lg font-bold text-stone-800 dark:text-stone-200 mb-2">Something went wrong</h3>
+                    <p className="text-stone-500 dark:text-stone-400 mb-6 max-w-xs">{error}</p>
+                    <button 
+                        onClick={() => loadFeed(true)}
+                        className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors shadow-lg shadow-emerald-600/20 active:scale-95"
+                    >
+                        Try Again
+                    </button>
+                </div>
             )}
-         </div>
-      </main>
 
-      {/* Mobile Bottom Navigation */}
-      <MobileBottomNav 
-        activeTab={mobileActiveTab}
-        onTabChange={handleMobileTabChange}
-        onScrollTop={scrollToTop}
-        isScrolled={isScrolled}
-      />
+            {/* Loading Visualizer (Initial) */}
+            {loadingPhase !== 'idle' && posts.length === 0 && !error && (
+                <ScanningVisualizer phase={loadingPhase} />
+            )}
 
-      {/* Mobile Explore/Sub Switcher (Triggered by Explore Tab) */}
-      {mobileExploreOpen && (
-          <div className="md:hidden">
-              <QuickSubSwitcher 
-                followedSubs={followedSubs}
-                onNavigate={handleNavigate}
-                onFollow={handleFollow}
-                currentFeed={currentFeed}
-                currentSub={currentSub}
-                forceOpen={true}
-                onClose={() => {
-                    setMobileExploreOpen(false);
-                    setMobileActiveTab('home');
-                }}
-              />
+            {/* Post Feed */}
+            <div className="space-y-4 md:space-y-6 columns-1 md:columns-1 lg:columns-1 gap-6 max-w-3xl mx-auto">
+                {posts.map((post) => (
+                    <LazyRender key={post.id} minHeight={200} className="break-inside-avoid">
+                        <PostCard 
+                            post={post} 
+                            isSeen={!!seenPosts[post.id]}
+                            onClick={handlePostClick}
+                            onNavigateSub={(sub) => handleNavigate('subreddit', sub)}
+                            onNavigateUser={(user) => handleNavigate('user', user)}
+                            onImageClick={(items, idx) => setViewingGallery({ items, index: idx })}
+                            viewMode={viewMode}
+                        />
+                    </LazyRender>
+                ))}
+            </div>
+
+            {/* Skeletons for pagination loading */}
+            {loadingPhase !== 'idle' && posts.length > 0 && (
+                <div className="mt-6 max-w-3xl mx-auto space-y-6">
+                    <PostSkeleton viewMode={viewMode} />
+                    <PostSkeleton viewMode={viewMode} />
+                </div>
+            )}
+            
+            {/* Observer Target */}
+            {!error && <div ref={observerTarget} className="h-20 w-full" />}
+            
+            {/* End of Feed */}
+            {loadingPhase === 'idle' && posts.length > 0 && !after && (
+                 <div className="text-center py-12 text-stone-400 dark:text-stone-600">
+                     <p>You've reached the end of zen.</p>
+                 </div>
+            )}
           </div>
-      )}
-      
-      {/* Desktop Quick Switcher FAB (Hidden on Mobile now) */}
-      <div className="hidden md:block">
-        <QuickSubSwitcher 
-            followedSubs={followedSubs}
-            onNavigate={handleNavigate}
-            onFollow={handleFollow}
-            currentFeed={currentFeed}
-            currentSub={currentSub}
-        />
       </div>
 
-      {/* Modals */}
+      {/* Post Detail Modal */}
       {selectedPost && (
-          <PostDetail 
-            post={selectedPost} 
-            onClose={handlePostClose} 
-            onNavigateSub={handlePostNavigateSub}
-            onNavigateUser={handlePostNavigateUser}
-            textSize={textSize}
-            aiConfig={aiConfig}
-            onCommentsBlocked={handleCommentsBlocked}
-            onImageClick={handleGalleryClick}
-            onInternalLinkClick={handleInternalLinkClick}
-          />
+        <PostDetail 
+          post={selectedPost} 
+          onClose={handleCloseDetail}
+          onNavigateSub={(sub) => {
+             setSelectedPost(null);
+             handleNavigate('subreddit', sub);
+          }}
+          onNavigateUser={(user) => {
+             setSelectedPost(null);
+             handleNavigate('user', user);
+          }}
+          textSize={textSize}
+          aiConfig={aiConfig}
+          onCommentsBlocked={(count) => {
+             setBlockedCommentCount(prev => prev + count);
+          }}
+          onImageClick={(items, idx) => {
+             setViewingGallery({ items, index: idx });
+          }}
+          onInternalLinkClick={handleInternalLink}
+        />
       )}
 
+      {/* Image Gallery Viewer */}
       {viewingGallery && (
           <ImageViewer 
-            items={viewingGallery.items}
-            initialIndex={viewingGallery.index}
-            onClose={handleGalleryClose} 
+            items={viewingGallery.items} 
+            initialIndex={viewingGallery.index} 
+            onClose={() => setViewingGallery(null)} 
           />
       )}
 
+      {/* Settings Modal */}
       <SettingsModal 
-        isOpen={settingsOpen}
-        onClose={() => {
-            setSettingsOpen(false);
-            setMobileActiveTab('home');
-        }}
+        isOpen={settingsOpen} 
+        onClose={() => setSettingsOpen(false)} 
         config={aiConfig}
-        onSave={handleSaveSettings}
+        onSave={setAiConfig}
         pageSize={pageSize}
         onPageSizeChange={setPageSize}
         textSize={textSize}
@@ -943,12 +784,45 @@ const App: React.FC = () => {
         blockedCommentCount={blockedCommentCount}
       />
 
-      {/* Onboarding Modal */}
-      <OnboardingModal 
-        isOpen={showOnboarding}
-        onClose={handleCloseOnboarding}
+      {/* Mobile Explore/Search Sheet */}
+      <QuickSubSwitcher
+        forceOpen={mobileExploreOpen}
+        onClose={() => {
+            setMobileExploreOpen(false);
+            if (mobileActiveTab === 'explore') setMobileActiveTab('home');
+        }}
+        followedSubs={followedSubs}
+        onNavigate={handleNavigate}
+        onFollow={handleFollow}
+        currentFeed={currentFeed}
+        currentSub={currentSub}
       />
 
+      {/* Onboarding */}
+      <OnboardingModal 
+        isOpen={showOnboarding} 
+        onClose={() => setShowOnboarding(false)} 
+      />
+
+      {/* Mobile Bottom Nav */}
+      <MobileBottomNav 
+        activeTab={mobileActiveTab} 
+        onTabChange={handleMobileTabChange}
+        onScrollTop={scrollToTop}
+        isScrolled={mainScrollRef.current ? mainScrollRef.current.scrollTop > 200 : false}
+      />
+      
+      {/* Desktop Quick Switcher FAB */}
+      <div className="hidden md:block">
+         <QuickSubSwitcher
+            followedSubs={followedSubs}
+            onNavigate={handleNavigate}
+            onFollow={handleFollow}
+            currentFeed={currentFeed}
+            currentSub={currentSub}
+            forceOpen={false}
+         />
+      </div>
     </div>
   );
 };
