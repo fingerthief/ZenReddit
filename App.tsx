@@ -5,6 +5,7 @@ import PostCard from './components/PostCard';
 import PostDetail from './components/PostDetail';
 import ImageViewer from './components/ImageViewer';
 import SettingsModal from './components/SettingsModal';
+import OnboardingModal from './components/OnboardingModal';
 import ScanningVisualizer, { LoadingPhase } from './components/ScanningVisualizer';
 import QuickSubSwitcher from './components/QuickSubSwitcher';
 import LazyRender from './components/LazyRender';
@@ -145,6 +146,7 @@ const App: React.FC = () => {
   // UI State
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mobileExploreOpen, setMobileExploreOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   
   // Mobile Bottom Nav State
   const [mobileActiveTab, setMobileActiveTab] = useState<'home' | 'explore' | 'settings'>('home');
@@ -166,6 +168,16 @@ const App: React.FC = () => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     localStorage.setItem('zen_theme', theme);
   }, [theme]);
+
+  // Onboarding Check
+  useEffect(() => {
+    const hasSeen = localStorage.getItem('zen_onboarding_seen');
+    if (!hasSeen) {
+        // Small delay to ensure app is loaded nicely behind it
+        const timer = setTimeout(() => setShowOnboarding(true), 1500);
+        return () => clearTimeout(timer);
+    }
+  }, []);
 
   // Batch save effect for simple configs
   useEffect(() => {
@@ -261,6 +273,11 @@ const App: React.FC = () => {
   };
 
   const handleSaveSettings = (config: AIConfig) => setAiConfig(config);
+
+  const handleCloseOnboarding = () => {
+      localStorage.setItem('zen_onboarding_seen', 'true');
+      setShowOnboarding(false);
+  };
 
   const handlePostClick = useCallback((post: FilteredPost) => {
       try { window.history.pushState({ postOpen: true }, '', null); } catch (e) {}
@@ -924,6 +941,12 @@ const App: React.FC = () => {
         onTextSizeChange={setTextSize}
         blockedCount={blockedCount}
         blockedCommentCount={blockedCommentCount}
+      />
+
+      {/* Onboarding Modal */}
+      <OnboardingModal 
+        isOpen={showOnboarding}
+        onClose={handleCloseOnboarding}
       />
 
     </div>

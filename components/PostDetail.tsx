@@ -1,5 +1,4 @@
 
-
 import React, { useEffect, useState, useRef, useMemo, memo, useContext, useCallback } from 'react';
 import { FilteredPost, RedditComment, RedditListing, CommentAnalysis, AIConfig, RedditMore, GalleryItem, FactCheckResult, CommentSortOption } from '../types';
 import { fetchComments, fetchMoreChildren } from '../services/redditService';
@@ -12,6 +11,7 @@ import remarkGfm from 'remark-gfm';
 import ScanningVisualizer from './ScanningVisualizer';
 import LazyRender from './LazyRender';
 import FactCheckModal from './FactCheckModal';
+import ZenBadge from './ZenBadge';
 
 interface PostDetailProps {
   post: FilteredPost;
@@ -1113,13 +1113,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, o
                         )}
 
                         {post.zenScore !== undefined && (
-                             <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
-                                post.zenScore >= 80 ? 'text-green-600 bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' :
-                                post.zenScore >= 50 ? 'text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800' :
-                                'text-orange-600 bg-orange-50 border-orange-200 dark:bg-orange-900/20 dark:border-orange-800'
-                            }`}>
-                                Zen: {post.zenScore}
-                            </span>
+                             <ZenBadge score={post.zenScore} size="md" />
                         )}
                     </div>
 

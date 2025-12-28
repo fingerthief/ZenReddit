@@ -1,9 +1,9 @@
 
-
 import React, { useMemo, useState } from 'react';
 import { FilteredPost, GalleryItem, ViewMode } from '../types';
 import { MessageSquare, ArrowBigUp, Image as ImageIcon, CirclePlay, Layers, ExternalLink, Maximize2, Minimize2, Share2, Check, Tag } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import ZenBadge from './ZenBadge';
 
 interface PostCardProps {
   post: FilteredPost;
@@ -34,10 +34,6 @@ const FlairBadge: React.FC<{ text: string; bgColor?: string; textColor?: 'dark' 
   if (!text) return null;
   
   const hasBg = bgColor && bgColor !== 'transparent' && bgColor !== '';
-  
-  // When Reddit provides a color, it often assumes their own platform's contrast.
-  // We force high contrast here. 'light' means text should be white on dark bg.
-  // 'dark' means text should be dark on light bg.
   const isLightText = textColor === 'light';
   
   const style: React.CSSProperties = {
@@ -197,7 +193,6 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
       return src;
   };
 
-  // Memoize the media content generation to prevent expensive checks on every scroll/render
   const mediaContent = useMemo(() => {
     const isVideo = post.is_video || 
                     !!post.secure_media?.reddit_video || 
@@ -348,13 +343,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
                       )}
                     </div>
                      {post.zenScore !== undefined && (
-                        <div 
-                            className={`shrink-0 w-2 h-2 rounded-full mt-1.5 shadow-sm ${
-                                post.zenScore >= 80 ? 'bg-green-500 shadow-green-500/50' :
-                                post.zenScore >= 50 ? 'bg-blue-500 shadow-blue-500/50' : 'bg-orange-500 shadow-orange-500/50'
-                            }`}
-                            title={`Zen Score: ${post.zenScore}`}
-                        />
+                        <ZenBadge score={post.zenScore} size="sm" className="shrink-0" />
                     )}
                 </div>
 
@@ -461,13 +450,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
 
             {/* Zen Badge */}
             {post.zenScore !== undefined && (
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border transition-all duration-300 ${
-                post.zenScore >= 80 ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-900/50 shadow-[0_0_10px_rgba(34,197,94,0.2)]' :
-                post.zenScore >= 50 ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-900/50' :
-                'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-900/50'
-              }`}>
-                Zen: {post.zenScore}
-              </span>
+                <ZenBadge score={post.zenScore} />
             )}
           </div>
 
