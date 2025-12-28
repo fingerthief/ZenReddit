@@ -111,7 +111,7 @@ const FactCheckModal: React.FC<FactCheckModalProps> = ({
                         )}
                         
                         <div className="text-[10px] text-stone-400 text-center pt-2">
-                            Automated fact-checking by Google Gemini using Google Search. Results may vary.
+                            Automated fact-checking via OpenRouter AI. Results may vary.
                         </div>
                     </div>
                 ) : (
