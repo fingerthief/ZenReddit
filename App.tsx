@@ -617,7 +617,7 @@ export default function App() {
 
   return (
     <div 
-        className="flex bg-stone-100 dark:bg-stone-950 h-[100dvh] w-full overflow-hidden font-sans text-stone-900 dark:text-stone-100 transition-colors" 
+        className="flex bg-stone-100 dark:bg-stone-950 h-screen w-full overflow-hidden font-sans text-stone-900 dark:text-stone-100 transition-colors" 
         onTouchStart={handleTouchStart} 
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -679,13 +679,13 @@ export default function App() {
       <main 
         id="main-scroll"
         ref={mainScrollRef}
-        className="flex-1 h-full overflow-y-auto overflow-x-hidden w-full relative z-10 bg-stone-100 dark:bg-stone-950 scroll-smooth pb-32 md:pb-0"
+        className="flex-1 h-full overflow-y-auto overflow-x-hidden w-full relative z-10 bg-stone-100 dark:bg-stone-950 scroll-smooth pb-16 md:pb-0"
         style={{ 
             transform: `translateY(${pullY}px)`, 
             transition: isPulling ? 'none' : 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)' 
         }}
       >
-         <div className="max-w-[1800px] mx-auto px-2 pt-20 md:pt-8 md:px-6 md:pb-8">
+         <div className="max-w-[1800px] mx-auto px-2 pt-20 md:pt-8 md:px-6 pb-20 md:pb-8">
             {/* Search Bar (Desktop Only) */}
             <form onSubmit={handleSearchSubmit} className="hidden md:block relative mb-6 group max-w-3xl mx-auto xl:max-w-none transform transition-all duration-300 hover:scale-[1.01]">
                 <div className="relative flex items-center w-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl shadow-sm group-focus-within:shadow-md focus-within:ring-2 focus-within:ring-emerald-500/30 focus-within:border-emerald-500 transition-all overflow-hidden">

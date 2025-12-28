@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en" class="light">
   <head>
@@ -11,9 +12,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="ZenReddit">
-    <link rel="manifest" href="manifest.json">
-    <link rel="icon" type="image/svg+xml" href="icon.svg">
-    <link rel="apple-touch-icon" href="icon.svg">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/svg+xml" href="/icon.svg">
+    <link rel="apple-touch-icon" href="/icon.svg">
 
     <title>ZenReddit</title>
     
@@ -65,10 +66,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
       :root {
-        --sat: env(safe-area-inset-top, 0px);
-        --sab: env(safe-area-inset-bottom, 0px);
-        --sal: env(safe-area-inset-left, 0px);
-        --sar: env(safe-area-inset-right, 0px);
+        --sat: env(safe-area-inset-top);
+        --sab: env(safe-area-inset-bottom);
+        --sal: env(safe-area-inset-left);
+        --sar: env(safe-area-inset-right);
         
         --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
         --ease-out-circ: cubic-bezier(0.075, 0.82, 0.165, 1);
@@ -81,12 +82,10 @@
         background-color: #f5f5f4;
         overscroll-behavior-y: none;
         -webkit-tap-highlight-color: transparent;
-        /* Use dynamic viewport height (dvh) to properly handle mobile address bars */
-        min-height: 100dvh;
+        height: 100%;
         width: 100%;
         overflow-x: hidden;
-        padding-top: var(--sat);
-        margin: 0;
+        padding-top: var(--sat); 
       }
       .dark body {
         background-color: #0c0a09;
@@ -194,7 +193,6 @@
       }
 
       /* Native-like safe area padding utility classes */
-      /* Note: We are now handling the bottom nav specifically with inline styles to be more robust in builds */
       .pb-safe { padding-bottom: var(--sab); }
       .pt-safe { padding-top: var(--sat); }
       .pl-safe { padding-left: var(--sal); }
