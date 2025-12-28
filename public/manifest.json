@@ -1,10 +1,11 @@
+
 {
   "id": "com.zenreddit.app",
   "name": "ZenReddit",
   "short_name": "ZenReddit",
   "description": "A peaceful Reddit client that uses AI to filter out rage-bait and divisive content, ensuring a zen browsing experience.",
-  "start_url": "./",
-  "scope": "./",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f5f5f4",
   "theme_color": "#10b981",
@@ -12,10 +13,22 @@
   "categories": ["news", "social", "productivity"],
   "icons": [
     {
-      "src": "icon.svg",
+      "src": "/icon.svg",
       "type": "image/svg+xml",
-      "sizes": "192x192 512x512",
-      "purpose": "any maskable"
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512",
+      "purpose": "maskable"
     }
   ]
 }
