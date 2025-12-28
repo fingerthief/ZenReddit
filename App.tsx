@@ -679,7 +679,7 @@ export default function App() {
       <main 
         id="main-scroll"
         ref={mainScrollRef}
-        className="flex-1 h-full overflow-y-auto overflow-x-hidden w-full relative z-10 bg-stone-100 dark:bg-stone-950 scroll-smooth pb-24 md:pb-0"
+        className="flex-1 h-full overflow-y-auto overflow-x-hidden w-full relative z-10 bg-stone-100 dark:bg-stone-950 scroll-smooth pb-32 md:pb-0"
         style={{ 
             transform: `translateY(${pullY}px)`, 
             transition: isPulling ? 'none' : 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)' 
