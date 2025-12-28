@@ -1091,7 +1091,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, o
             {/* Content */}
             <div 
                 ref={scrollContainerRef}
-                className="flex-1 overflow-y-auto bg-white dark:bg-stone-950 relative"
+                className="flex-1 overflow-y-auto overflow-x-hidden bg-white dark:bg-stone-950 relative overscroll-contain"
             >
             <div className="md:p-8 md:pb-20 max-w-5xl mx-auto pb-safe">
                 {/* Post Title & Meta */}
