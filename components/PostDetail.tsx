@@ -1047,51 +1047,53 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, o
             className="bg-white dark:bg-stone-950 w-full md:max-w-6xl lg:max-w-7xl h-[100dvh] md:h-[90vh] md:rounded-2xl shadow-2xl flex flex-col overflow-hidden md:border border-stone-200 dark:border-stone-800 animate-modal-spring relative z-10"
             onClick={(e) => e.stopPropagation()}
         >
-            {/* Responsive Header */}
-            <div className="flex items-center justify-between px-3 md:px-4 py-3 border-b border-stone-200 dark:border-stone-800 bg-white/90 dark:bg-stone-950/90 backdrop-blur-md shrink-0 sticky top-0 z-20 h-auto pt-safe md:pt-3">
-                <div className="flex items-center gap-3 overflow-hidden flex-1">
-                    <button onClick={onClose} className="p-2 -ml-2 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-full transition-colors shrink-0 md:hidden btn-press">
-                        <ChevronLeft size={24} className="text-stone-800 dark:text-stone-200" />
-                    </button>
-                    
-                    <div className="flex items-center gap-3 min-w-0">
-                        <div 
-                            className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0 text-emerald-600 dark:text-emerald-400 font-bold text-sm md:text-base cursor-pointer"
-                            onClick={() => onNavigateSub && onNavigateSub(post.subreddit)}
-                        >
-                            r/
-                        </div>
-                        <div className="flex flex-col min-w-0 justify-center">
-                            <button 
+            {/* Responsive Header - Adjusted for Safe Area Overlap Fix */}
+            <div className="sticky top-0 z-20 shrink-0 border-b border-stone-200 dark:border-stone-800 bg-white/90 dark:bg-stone-950/90 backdrop-blur-md pt-safe">
+                <div className="flex items-center justify-between px-3 md:px-4 py-3">
+                    <div className="flex items-center gap-3 overflow-hidden flex-1">
+                        <button onClick={onClose} className="p-2 -ml-2 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-full transition-colors shrink-0 md:hidden btn-press">
+                            <ChevronLeft size={24} className="text-stone-800 dark:text-stone-200" />
+                        </button>
+                        
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div 
+                                className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0 text-emerald-600 dark:text-emerald-400 font-bold text-sm md:text-base cursor-pointer"
                                 onClick={() => onNavigateSub && onNavigateSub(post.subreddit)}
-                                className="font-bold text-stone-900 dark:text-stone-100 truncate text-sm md:text-base hover:text-emerald-600 dark:hover:text-emerald-400 text-left transition-colors leading-tight"
                             >
-                                {post.subreddit}
-                            </button>
-                            <div className="text-xs text-stone-500 dark:text-stone-400 truncate flex items-center gap-1.5 leading-tight opacity-80">
-                                <span className="hidden sm:inline">Posted by</span>
-                                <span 
-                                    className="hover:underline cursor-pointer hover:text-stone-800 dark:hover:text-stone-200"
-                                    onClick={(e) => {
-                                        if (onNavigateUser) {
-                                            e.stopPropagation();
-                                            onNavigateUser(post.author);
-                                        }
-                                    }}
+                                r/
+                            </div>
+                            <div className="flex flex-col min-w-0 justify-center">
+                                <button 
+                                    onClick={() => onNavigateSub && onNavigateSub(post.subreddit)}
+                                    className="font-bold text-stone-900 dark:text-stone-100 truncate text-sm md:text-base hover:text-emerald-600 dark:hover:text-emerald-400 text-left transition-colors leading-tight"
                                 >
-                                    u/{post.author}
-                                </span>
-                                <span className="text-stone-300 dark:text-stone-700">•</span>
-                                <span className="shrink-0">{formatDistanceToNow(new Date(post.created_utc * 1000)).replace('about ', '').replace(' hours', 'h')} ago</span>
+                                    {post.subreddit}
+                                </button>
+                                <div className="text-xs text-stone-500 dark:text-stone-400 truncate flex items-center gap-1.5 leading-tight opacity-80">
+                                    <span className="hidden sm:inline">Posted by</span>
+                                    <span 
+                                        className="hover:underline cursor-pointer hover:text-stone-800 dark:hover:text-stone-200"
+                                        onClick={(e) => {
+                                            if (onNavigateUser) {
+                                                e.stopPropagation();
+                                                onNavigateUser(post.author);
+                                            }
+                                        }}
+                                    >
+                                        u/{post.author}
+                                    </span>
+                                    <span className="text-stone-300 dark:text-stone-700">•</span>
+                                    <span className="shrink-0">{formatDistanceToNow(new Date(post.created_utc * 1000)).replace('about ', '').replace(' hours', 'h')} ago</span>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                {/* Desktop Close Button */}
-                <button onClick={onClose} className="hidden md:block p-2 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-full transition-colors shrink-0 btn-press ml-2">
-                    <X size={24} className="text-stone-500 dark:text-stone-400" />
-                </button>
+                    {/* Desktop Close Button */}
+                    <button onClick={onClose} className="hidden md:block p-2 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-full transition-colors shrink-0 btn-press ml-2">
+                        <X size={24} className="text-stone-500 dark:text-stone-400" />
+                    </button>
+                </div>
             </div>
 
             {/* Content */}

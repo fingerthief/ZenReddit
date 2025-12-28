@@ -623,8 +623,8 @@ const App: React.FC = () => {
         onTouchEnd={handleTouchEnd}
     >
       {/* Mobile Top Bar - Clean & Minimal */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-auto pt-safe pb-2 px-4 bg-stone-100/90 dark:bg-stone-950/90 backdrop-blur-md z-40 transition-transform duration-300">
-          <div className="flex items-center justify-between h-10">
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-stone-100/90 dark:bg-stone-950/90 backdrop-blur-md pt-safe transition-transform duration-300">
+          <div className="flex items-center justify-between h-12 px-4 pb-2 pt-2">
             <span className="font-semibold text-lg bg-clip-text text-transparent bg-gradient-to-r from-emerald-600 to-teal-500 flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)] animate-pulse"></span>
                 ZenReddit
