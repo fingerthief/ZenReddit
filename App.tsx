@@ -922,6 +922,8 @@ const App: React.FC = () => {
         onPageSizeChange={setPageSize}
         textSize={textSize}
         onTextSizeChange={setTextSize}
+        blockedCount={blockedCount}
+        blockedCommentCount={blockedCommentCount}
       />
 
     </div>

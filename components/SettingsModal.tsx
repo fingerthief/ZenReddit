@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, CircleAlert, Loader2, Shield, Key, Check, Search, Sparkles, Layers, Type, MessageSquare, Archive, Upload, Download } from 'lucide-react';
+import { X, Save, CircleAlert, Loader2, Shield, Key, Check, Search, Sparkles, Layers, Type, MessageSquare, Archive, Upload, Download, ShieldCheck, BarChart3 } from 'lucide-react';
 import { AIConfig, AIProvider } from '../types';
 
 interface SettingsModalProps {
@@ -12,6 +12,8 @@ interface SettingsModalProps {
   onPageSizeChange: (size: number) => void;
   textSize: 'small' | 'medium' | 'large';
   onTextSizeChange: (size: 'small' | 'medium' | 'large') => void;
+  blockedCount: number;
+  blockedCommentCount: number;
 }
 
 const POPULAR_MODELS = [
@@ -22,7 +24,7 @@ const POPULAR_MODELS = [
 ];
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ 
-    isOpen, onClose, config, onSave, pageSize, onPageSizeChange, textSize, onTextSizeChange 
+    isOpen, onClose, config, onSave, pageSize, onPageSizeChange, textSize, onTextSizeChange, blockedCount, blockedCommentCount 
 }) => {
   const [provider] = useState<AIProvider>('openrouter');
   const [openRouterKey, setOpenRouterKey] = useState('');
@@ -205,6 +207,40 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         <div className="p-6 space-y-8 overflow-y-auto custom-scrollbar">
+            {/* Stats Dashboard (Visible on mobile primarily) */}
+            <div className="bg-stone-50 dark:bg-stone-800/50 p-4 rounded-xl border border-stone-100 dark:border-stone-800 relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-3 opacity-10">
+                    <BarChart3 size={60} />
+                </div>
+                
+                <h3 className="text-sm font-semibold text-stone-800 dark:text-stone-200 mb-4 flex items-center gap-2">
+                    <ShieldCheck size={18} className="text-emerald-500" />
+                    Zen Shield Status
+                </h3>
+                
+                <div className="space-y-3 relative z-10">
+                    <div>
+                        <div className="flex justify-between text-xs text-stone-500 dark:text-stone-400 mb-1.5">
+                            <span>Blocked Posts</span>
+                            <span className="font-mono font-medium">{blockedCount}</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
+                            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.min(blockedCount, 100)}%` }}></div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div className="flex justify-between text-xs text-stone-500 dark:text-stone-400 mb-1.5">
+                            <span>Toxic Comments Hidden</span>
+                            <span className="font-mono font-medium">{blockedCommentCount}</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
+                            <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(blockedCommentCount, 100)}%` }}></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             {/* Filter Strictness Section */}
             <div>
                 <div className="flex items-center justify-between mb-4">
