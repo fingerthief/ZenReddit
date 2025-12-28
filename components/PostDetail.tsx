@@ -733,14 +733,16 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, o
       setFactCheckResult(null);
 
       try {
-          const result = await factCheckComment(text, subreddit);
+          // Pass the OpenRouter key and model from config
+          const apiKey = aiConfig.openRouterKey || process.env.API_KEY;
+          const result = await factCheckComment(text, subreddit, apiKey, aiConfig.openRouterModel);
           setFactCheckResult(result);
       } catch (e) {
           console.error("Fact check UI failed", e);
       } finally {
           setIsFactChecking(false);
       }
-  }, []);
+  }, [aiConfig]);
 
   // Stable context value
   const contextValue = useMemo(() => ({
@@ -770,26 +772,30 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, o
       
       const t1Comments = data.filter((c): c is RedditComment => c.kind === 't1');
 
-      if (aiConfig.analyzeComments && t1Comments.length > 0 && aiConfig.openRouterKey) {
-           setAnalyzingComments(true);
-           try {
-               const analysisResults = await analyzeCommentsForZen(t1Comments, aiConfig, {
-                   title: post.title,
-                   subreddit: post.subreddit,
-                   selftext: post.selftext
-               });
-               const map: Record<string, CommentAnalysis> = {};
-               analysisResults.forEach(r => map[r.id] = r);
-               setCommentAnalysisMap(map);
-               
-               const toxicCount = analysisResults.filter(r => r.isToxic).length;
-               if (toxicCount > 0) {
-                   onCommentsBlocked(toxicCount);
-               }
-           } catch (e) {
-               console.warn("Comment analysis failed", e);
-           } finally {
-               setAnalyzingComments(false);
+      if (aiConfig.analyzeComments && t1Comments.length > 0) {
+           // We check for key inside analyzeCommentsForZen now too, but check here to show loading state
+           const hasKey = aiConfig.openRouterKey || process.env.API_KEY;
+           if (hasKey) {
+                setAnalyzingComments(true);
+                try {
+                    const analysisResults = await analyzeCommentsForZen(t1Comments, aiConfig, {
+                        title: post.title,
+                        subreddit: post.subreddit,
+                        selftext: post.selftext
+                    });
+                    const map: Record<string, CommentAnalysis> = {};
+                    analysisResults.forEach(r => map[r.id] = r);
+                    setCommentAnalysisMap(map);
+                    
+                    const toxicCount = analysisResults.filter(r => r.isToxic).length;
+                    if (toxicCount > 0) {
+                        onCommentsBlocked(toxicCount);
+                    }
+                } catch (e) {
+                    console.warn("Comment analysis failed", e);
+                } finally {
+                    setAnalyzingComments(false);
+                }
            }
       }
     };

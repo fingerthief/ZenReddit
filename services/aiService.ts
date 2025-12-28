@@ -1,6 +1,5 @@
 
 import { RedditPostData, AIConfig, RedditComment, CommentAnalysis, FactCheckResult } from "../types";
-import { GoogleGenAI } from "@google/genai";
 
 export interface AnalysisResult {
   id: string;
@@ -13,10 +12,6 @@ const cleanJsonString = (str: string) => {
     // Remove markdown code blocks if present (e.g. ```json ... ```)
     return str.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
 };
-
-const PROMPT_MODEL_ID = 'gemini-2.0-flash-lite-preview-02-05';
-// We need a model that supports search grounding for fact checking
-const FACT_CHECK_MODEL_ID = 'gemini-2.0-flash-lite-preview-02-05'; 
 
 export const analyzePostsForZen = async (posts: RedditPostData[], config?: AIConfig): Promise<AnalysisResult[]> => {
   if (posts.length === 0) return [];
@@ -45,55 +40,15 @@ export const analyzePostsForZen = async (posts: RedditPostData[], config?: AICon
     - isRageBait: boolean (true if zenScore < ${threshold})
   `;
 
-  // Logic: Use OpenRouter IF key is explicitly provided in config.
-  // Otherwise, use process.env.API_KEY as a Google GenAI key.
-  
-  if (config?.openRouterKey) {
-     return analyzeWithOpenRouter(postsPayload, systemPrompt, config.openRouterKey, config.openRouterModel, threshold);
-  } else if (process.env.API_KEY) {
-     return analyzeWithGoogleGenAI(postsPayload, systemPrompt, process.env.API_KEY, threshold);
+  // Use OpenRouter exclusively
+  const apiKey = config?.openRouterKey || process.env.API_KEY;
+
+  if (apiKey) {
+     return analyzeWithOpenRouter(postsPayload, systemPrompt, apiKey, config?.openRouterModel, threshold);
   } else {
      return fallbackResult(posts);
   }
 };
-
-const analyzeWithGoogleGenAI = async (
-    payload: any, 
-    systemPrompt: string, 
-    apiKey: string,
-    threshold: number
-): Promise<AnalysisResult[]> => {
-    try {
-        const ai = new GoogleGenAI({ apiKey });
-        const response = await ai.models.generateContent({
-            model: PROMPT_MODEL_ID,
-            contents: JSON.stringify(payload),
-            config: {
-                systemInstruction: systemPrompt,
-                responseMimeType: 'application/json'
-            }
-        });
-
-        const text = response.text;
-        if (!text) throw new Error("No text returned from Gemini");
-        
-        const parsed = JSON.parse(text);
-        const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.data);
-        
-        if (!Array.isArray(results)) throw new Error("Invalid structure from Gemini");
-
-        return results.map((r: any) => ({
-            id: r.id,
-            isRageBait: typeof r.isRageBait === 'boolean' ? r.isRageBait : (r.zenScore < threshold),
-            zenScore: typeof r.zenScore === 'number' ? r.zenScore : 50,
-            reason: r.reason || "AI analysis"
-        }));
-
-    } catch (error) {
-        console.error("Gemini Analysis Failed:", error);
-        return fallbackResult(payload);
-    }
-}
 
 const analyzeWithOpenRouter = async (
     payload: any, 
@@ -171,6 +126,9 @@ export const analyzeCommentsForZen = async (
 ): Promise<CommentAnalysis[]> => {
   if (comments.length === 0) return [];
 
+  const apiKey = config?.openRouterKey || process.env.API_KEY;
+  if (!apiKey) return [];
+
   const payload = comments.slice(0, 15).map(c => {
     let repliesContext: string[] = [];
     if (c.data.replies && typeof c.data.replies !== 'string' && c.data.replies.data) {
@@ -208,176 +166,117 @@ export const analyzeCommentsForZen = async (
     Return JSON: { "results": [{ "id": "string", "isToxic": boolean, "reason": "string", "isFactCheckable": boolean }] }
   `;
 
-  if (config?.openRouterKey) {
-      // Use OpenRouter
-      try {
-        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-            method: "POST",
-            headers: {
-            "Authorization": `Bearer ${config.openRouterKey}`,
-            "Content-Type": "application/json",
-            "HTTP-Referer": window.location.origin, 
-            "X-Title": "ZenReddit"
-            },
-            body: JSON.stringify({
-            model: config.openRouterModel || 'meta-llama/llama-3-8b-instruct:free',
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: JSON.stringify(payload) }
-            ],
-            response_format: { type: "json_object" } 
-            })
-        });
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": window.location.origin, 
+        "X-Title": "ZenReddit"
+        },
+        body: JSON.stringify({
+        model: config?.openRouterModel || 'meta-llama/llama-3-8b-instruct:free',
+        messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: JSON.stringify(payload) }
+        ],
+        response_format: { type: "json_object" } 
+        })
+    });
 
-        if (!response.ok) return [];
+    if (!response.ok) return [];
 
-        const data = await response.json();
-        const content = data.choices?.[0]?.message?.content;
-        if (!content) return [];
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) return [];
 
-        const parsed = JSON.parse(cleanJsonString(content));
-        const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.data);
-        
-        if (Array.isArray(results)) {
-            return results.map((r: any) => ({
-                id: r.id,
-                isToxic: !!r.isToxic,
-                reason: r.reason,
-                isFactCheckable: !!r.isFactCheckable
-            }));
-        }
-        return [];
-    } catch (e) {
-        console.warn("OpenRouter Comment analysis error", e);
-        return [];
+    const parsed = JSON.parse(cleanJsonString(content));
+    const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.data);
+    
+    if (Array.isArray(results)) {
+        return results.map((r: any) => ({
+            id: r.id,
+            isToxic: !!r.isToxic,
+            reason: r.reason,
+            isFactCheckable: !!r.isFactCheckable
+        }));
     }
-  } else if (process.env.API_KEY) {
-      // Use Google GenAI
-      try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const response = await ai.models.generateContent({
-            model: PROMPT_MODEL_ID,
-            contents: JSON.stringify(payload),
-            config: {
-                systemInstruction: systemPrompt,
-                responseMimeType: 'application/json'
-            }
-        });
-
-        const text = response.text;
-        if (!text) return [];
-        
-        const parsed = JSON.parse(text);
-        const results = Array.isArray(parsed) ? parsed : (parsed.results || parsed.data);
-        
-        if (Array.isArray(results)) {
-            return results.map((r: any) => ({
-                id: r.id,
-                isToxic: !!r.isToxic,
-                reason: r.reason,
-                isFactCheckable: !!r.isFactCheckable
-            }));
-        }
-        return [];
-      } catch (e) {
-          console.warn("Gemini Comment analysis error", e);
-          return [];
-      }
+    return [];
+  } catch (e) {
+      console.warn("OpenRouter Comment analysis error", e);
+      return [];
   }
-
-  return [];
 };
 
 // --- Fact Checking ---
 
 export const factCheckComment = async (
     commentBody: string, 
-    subreddit: string
+    subreddit: string,
+    apiKey?: string,
+    model?: string
 ): Promise<FactCheckResult> => {
-    const apiKey = process.env.API_KEY;
+    // If no specific key passed, try env
+    const key = apiKey || process.env.API_KEY;
     
-    // Fallback if no Google API key is present (Fact Checking requires Google Search Tool)
-    if (!apiKey) {
+    if (!key) {
         return {
             verdict: 'Unverified',
-            explanation: "API Key required for live fact checking.",
+            explanation: "API Key required for fact checking.",
             sources: []
         };
     }
 
     try {
-        const ai = new GoogleGenAI({ apiKey });
-        
-        const prompt = `
-            Fact check the main claims in this Reddit comment from r/${subreddit}:
-            "${commentBody.substring(0, 500)}"
+        const systemPrompt = `
+            You are a fact checker for Reddit comments.
+            Analyze the following comment from r/${subreddit}.
             
-            1. Search for reliable sources to verify the claims.
-            2. Determine a verdict: "True", "False", "Misleading", "Opinion" (if subjective), or "Unverified".
+            1. Verify the main claims using your training knowledge.
+            2. Determine a verdict: "True", "False", "Misleading", "Unverified", or "Opinion".
             3. Provide a concise explanation (max 2 sentences).
-            
-            Format your response exactly like this:
-            Verdict: [Verdict]
-            Explanation: [Explanation]
+            4. If possible, provide real sources/URLs that verify this, in the "sources" array.
+
+            Return JSON:
+            {
+                "verdict": "string",
+                "explanation": "string",
+                "sources": [{ "title": "string", "uri": "string" }]
+            }
         `;
 
-        const response = await ai.models.generateContent({
-            model: FACT_CHECK_MODEL_ID,
-            contents: prompt,
-            config: {
-                tools: [{ googleSearch: {} }],
-            }
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${key}`,
+                "Content-Type": "application/json",
+                "HTTP-Referer": window.location.origin,
+                "X-Title": "ZenReddit"
+            },
+            body: JSON.stringify({
+                model: model || 'meta-llama/llama-3-8b-instruct:free',
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: commentBody.substring(0, 500) }
+                ],
+                response_format: { type: "json_object" }
+            })
         });
 
-        // Parse sources from grounding chunks
-        const sources: { title: string; uri: string }[] = [];
-        const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+        if (!response.ok) throw new Error("API Error");
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content;
         
-        if (chunks) {
-            chunks.forEach((chunk: any) => {
-                if (chunk.web?.uri && chunk.web?.title) {
-                    sources.push({
-                        title: chunk.web.title,
-                        uri: chunk.web.uri
-                    });
-                }
-            });
-        }
+        if (!content) throw new Error("No content");
 
-        const text = response.text || "";
-        
-        let verdict: FactCheckResult['verdict'] = 'Unverified';
-        let explanation = text;
-
-        // More robust Regex parsing
-        const verdictRegex = /Verdict:\s*\*?([a-zA-Z]+)\*?/i;
-        const match = text.match(verdictRegex);
-
-        if (match && match[1]) {
-            const v = match[1].toLowerCase();
-            if (v === 'true') verdict = 'True';
-            else if (v === 'false') verdict = 'False';
-            else if (v === 'misleading') verdict = 'Misleading';
-            else if (v === 'opinion') verdict = 'Opinion';
-            else if (v === 'unverified') verdict = 'Unverified';
-        }
-
-        // Try to extract just the explanation part if the format was followed
-        const explRegex = /Explanation:\s*(.*)/is;
-        const explMatch = text.match(explRegex);
-        if (explMatch && explMatch[1]) {
-            explanation = explMatch[1].trim();
-        } else {
-             // Fallback: Remove the verdict line if found at the start
-             explanation = text.replace(verdictRegex, '').trim();
-        }
+        const parsed = JSON.parse(cleanJsonString(content));
         
         return {
-            verdict,
-            explanation: explanation,
-            sources: sources.filter((s, i, self) => 
-                self.findIndex((t) => t.uri === s.uri) === i
-            ).slice(0, 5) // Dedupe and limit
+            verdict: parsed.verdict || 'Unverified',
+            explanation: parsed.explanation || "No explanation provided.",
+            sources: Array.isArray(parsed.sources) ? parsed.sources : []
         };
 
     } catch (error) {
