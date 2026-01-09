@@ -295,107 +295,67 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
       
       return (
         <div 
-           className={`zen-card bg-white dark:bg-stone-900 rounded-lg shadow-sm border border-stone-200 dark:border-stone-800 flex overflow-hidden w-full ${isSeen ? 'opacity-60' : ''} touch-manipulation active:scale-[0.99] transition-transform`}
+           className={`zen-card relative bg-white dark:bg-stone-900 rounded-lg shadow-sm border border-stone-200 dark:border-stone-800 flex overflow-hidden w-full ${isSeen ? 'opacity-75' : ''} touch-manipulation transition-colors hover:border-emerald-500/30 dark:hover:border-emerald-500/30`}
            onClick={() => onClick(post)}
         >
-            {hasThumb && (
+            {/* Thumbnail Area - Click to view media */}
+            {hasThumb ? (
                 <div 
-                    className="w-[80px] min-h-[80px] sm:w-[110px] sm:min-h-[90px] shrink-0 bg-stone-100 dark:bg-stone-800 relative group overflow-hidden cursor-pointer"
+                    className="group/thumb relative w-[80px] sm:w-[100px] shrink-0 bg-stone-100 dark:bg-stone-800 cursor-pointer overflow-hidden border-r border-stone-100 dark:border-stone-800"
                     onClick={(e) => { 
-                        e.stopPropagation(); 
-                        triggerHaptic();
-                        if (viewMode === 'compact') {
-                            setIsExpanded(!isExpanded);
-                        } else {
-                            handleMediaClick(e); 
-                        }
+                        // Directly open media viewer
+                        handleMediaClick(e); 
                     }} 
                 >
-                    <img src={thumb} alt="thumb" className="w-full h-full object-cover absolute inset-0 transition-transform duration-500 group-hover:scale-110" loading="lazy" />
+                    <img 
+                        src={thumb} 
+                        alt="thumb" 
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover/thumb:scale-110" 
+                        loading="lazy" 
+                    />
                     
-                    {/* Expand/Collapse Overlay */}
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                         {isExpanded ? <Minimize2 size={24} className="text-white drop-shadow-md" /> : <Maximize2 size={24} className="text-white drop-shadow-md" />}
-                    </div>
-
-                    {!isExpanded && (post.is_video || post.domain === 'v.redd.it') && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/10 group-hover:hidden transition-colors">
-                            <CirclePlay size={24} className="text-white drop-shadow-md" />
+                    {(post.is_video || post.domain === 'v.redd.it') && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover/thumb:bg-black/10 transition-colors">
+                            <CirclePlay size={24} className="text-white drop-shadow-md opacity-90 group-hover/thumb:scale-110 transition-transform" />
                         </div>
                     )}
                 </div>
+            ) : (
+                <div className="w-3 shrink-0"></div> 
             )}
             
-            <div className={`py-2 pr-2 pl-3 sm:p-3 flex flex-col justify-between flex-1 min-w-0`}>
-                <div className="flex items-start justify-between gap-2">
-                    <div className="flex flex-col min-w-0">
-                      <h3 className={`text-sm sm:text-base font-medium leading-snug line-clamp-2 ${isSeen ? 'text-stone-500' : 'text-stone-800 dark:text-stone-200'}`}>
+            {/* Content Area */}
+            <div className="flex-1 min-w-0 py-2 pr-3 pl-2 sm:pl-3 flex flex-col justify-center gap-1">
+                <div className="flex items-start justify-between gap-2 mb-0.5">
+                     <h3 className={`text-sm sm:text-[15px] font-medium leading-snug line-clamp-2 ${isSeen ? 'text-stone-500 font-normal' : 'text-stone-800 dark:text-stone-200'} pr-1`}>
                           {decodeHtmlEntities(post.title)}
-                      </h3>
-                      {post.link_flair_text && (
-                        <div className="mt-1">
-                          <FlairBadge 
-                            text={post.link_flair_text} 
-                            bgColor={post.link_flair_background_color}
-                            textColor={post.link_flair_text_color}
-                          />
-                        </div>
-                      )}
-                    </div>
+                     </h3>
                      {post.zenScore !== undefined && (
-                        <ZenBadge score={post.zenScore} size="sm" className="shrink-0" />
+                        <ZenBadge score={post.zenScore} size="sm" className="shrink-0 mt-0.5" />
                     )}
                 </div>
 
-                {isExpanded && (
-                    <div 
-                        className="w-full my-2 animate-list-enter"
-                        onClick={(e) => e.stopPropagation()} 
-                    >
-                        {mediaContent}
-                    </div>
-                )}
-
-                <div className="flex items-center justify-between mt-2 text-xs text-stone-500 dark:text-stone-400 gap-2">
-                    <div className="flex items-center gap-1.5 truncate min-w-0">
-                        <span 
-                            className="font-medium hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer truncate transition-colors"
+                <div className="flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400">
+                    <div className="flex items-center gap-1.5 truncate flex-1 min-w-0">
+                         <span 
+                            className="font-medium text-stone-600 dark:text-stone-300 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors truncate"
                             onClick={(e) => { e.stopPropagation(); onNavigateSub && onNavigateSub(post.subreddit); }}
                         >
                             r/{post.subreddit}
                         </span>
                         <span className="text-stone-300 dark:text-stone-700 shrink-0">•</span>
-                        <span 
-                            className="hover:text-stone-800 dark:hover:text-stone-300 cursor-pointer"
-                            onClick={(e) => {
-                                if (onNavigateUser) {
-                                    e.stopPropagation();
-                                    onNavigateUser(post.author);
-                                }
-                            }}
-                        >
-                            u/{post.author}
-                        </span>
-                        <span className="text-stone-300 dark:text-stone-700 shrink-0">•</span>
-                        <span className="shrink-0">{formatDistanceToNow(new Date(post.created_utc * 1000), { addSuffix: false }).replace('about ', '').replace(' hours', 'h').replace('less than a minute', 'now')}</span>
+                        <span className="shrink-0 truncate">{formatDistanceToNow(new Date(post.created_utc * 1000), { addSuffix: false }).replace('about ', '').replace(' hours', 'h').replace('less than a minute', 'now')}</span>
                     </div>
-                    
+
                     <div className="flex items-center gap-3 shrink-0">
                          <div className="flex items-center gap-1">
-                            <ArrowBigUp size={14} className="stroke-[2.5px]" />
+                            <ArrowBigUp size={14} className={post.score > 0 ? "text-orange-600 dark:text-orange-500" : ""} />
                             <span>{post.score > 1000 ? `${(post.score/1000).toFixed(1)}k` : post.score}</span>
                          </div>
                          <div className="flex items-center gap-1">
-                            <MessageSquare size={12} className="stroke-[2.5px]" />
+                            <MessageSquare size={12} />
                             <span>{post.num_comments > 1000 ? `${(post.num_comments/1000).toFixed(1)}k` : post.num_comments}</span>
                          </div>
-                         <button 
-                             onClick={handleShare}
-                             className="flex items-center gap-1 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors p-2 -m-2"
-                             title="Share"
-                         >
-                            {showCopied ? <Check size={12} className="text-emerald-500" /> : <Share2 size={12} className="stroke-[2.5px]" />}
-                         </button>
                     </div>
                 </div>
             </div>
@@ -406,15 +366,15 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
   // --- CARD VIEW ---
   return (
     <div 
-      className={`zen-card bg-white dark:bg-stone-900 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 mb-6 break-inside-avoid flex flex-col cursor-pointer w-full ${isSeen ? 'opacity-80' : ''} touch-manipulation`}
+      className={`zen-card bg-white dark:bg-stone-900 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800 flex flex-col cursor-pointer w-full ${isSeen ? 'opacity-80' : ''} touch-manipulation`}
       onClick={() => { triggerHaptic(); onClick(post); }}
     >
       <div className="p-4 flex flex-col h-full">
           {/* Header */}
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center text-xs text-stone-500 dark:text-stone-400 gap-2 overflow-hidden flex-wrap">
+          <div className="flex items-start justify-between mb-2 gap-2">
+            <div className="flex items-center text-xs text-stone-500 dark:text-stone-400 gap-1.5 flex-wrap min-w-0">
                 <span 
-                    className="font-bold text-stone-700 dark:text-stone-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:underline cursor-pointer transition-colors"
+                    className="font-bold text-stone-700 dark:text-stone-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:underline cursor-pointer transition-colors truncate max-w-full"
                     onClick={(e) => {
                         if (onNavigateSub) {
                             e.stopPropagation();
@@ -426,7 +386,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
                 </span>
                 <span className="text-stone-300 dark:text-stone-600">•</span>
                 <span 
-                    className="hover:text-stone-800 dark:hover:text-stone-200 cursor-pointer hover:underline transition-colors"
+                    className="hover:text-stone-800 dark:hover:text-stone-200 cursor-pointer hover:underline transition-colors truncate max-w-[100px]"
                     onClick={(e) => {
                         if (onNavigateUser) {
                             e.stopPropagation();
@@ -437,32 +397,32 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
                     u/{post.author}
                 </span>
                 <span className="text-stone-300 dark:text-stone-600">•</span>
-                <span>{formatDistanceToNow(new Date(post.created_utc * 1000))} ago</span>
+                <span className="shrink-0">{formatDistanceToNow(new Date(post.created_utc * 1000)).replace('about ', '')} ago</span>
                 {post.author_flair_text && (
                   <FlairBadge 
                     text={post.author_flair_text} 
                     bgColor={post.author_flair_background_color}
                     textColor={post.author_flair_text_color}
-                    className="opacity-80 scale-90 origin-left"
+                    className="opacity-80 scale-90 origin-left max-w-[100px] truncate"
                   />
                 )}
             </div>
 
             {/* Zen Badge */}
             {post.zenScore !== undefined && (
-                <ZenBadge score={post.zenScore} />
+                <ZenBadge score={post.zenScore} className="shrink-0" />
             )}
           </div>
 
           {/* Title Area */}
           <div className="mb-2">
             <h3 
-              className={`text-base font-semibold leading-snug transition-colors ${isSeen ? 'text-stone-500 dark:text-stone-500' : 'text-stone-900 dark:text-stone-100 hover:text-emerald-700 dark:hover:text-emerald-400'}`}
+              className={`text-base font-semibold leading-relaxed transition-colors break-words ${isSeen ? 'text-stone-500 dark:text-stone-500' : 'text-stone-900 dark:text-stone-100 hover:text-emerald-700 dark:hover:text-emerald-400'}`}
             >
               {decodeHtmlEntities(post.title)}
             </h3>
             {post.link_flair_text && (
-              <div className="mt-2 flex gap-1">
+              <div className="mt-2 flex gap-1 flex-wrap">
                 <FlairBadge 
                   text={post.link_flair_text} 
                   bgColor={post.link_flair_background_color}
@@ -476,30 +436,28 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
           {mediaContent}
 
           {/* Footer */}
-          <div className="mt-4 flex items-center gap-4 text-stone-500 dark:text-stone-400 text-sm">
-            <div className="flex items-center gap-1.5 bg-stone-100 dark:bg-stone-800/50 px-2 py-1 rounded-md transition-colors hover:bg-stone-200 dark:hover:bg-stone-800">
-              <ArrowBigUp size={18} className={`${post.score > 0 ? 'text-orange-600 dark:text-orange-500' : ''}`} />
-              <span className="font-medium text-xs">{post.score > 1000 ? `${(post.score / 1000).toFixed(1)}k` : post.score}</span>
-            </div>
-            <div 
-                className="flex items-center gap-1.5 hover:bg-stone-100 dark:hover:bg-stone-800 px-2 py-1 rounded-md transition-colors"
-            >
-              <MessageSquare size={16} />
-              <span className="text-xs">{post.num_comments > 1000 ? `${(post.num_comments / 1000).toFixed(1)}k` : post.num_comments}</span>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-y-2 gap-x-2 text-stone-500 dark:text-stone-400 text-sm">
+            <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 bg-stone-100 dark:bg-stone-800/50 px-2 py-1 rounded-md transition-colors hover:bg-stone-200 dark:hover:bg-stone-800">
+                <ArrowBigUp size={18} className={`${post.score > 0 ? 'text-orange-600 dark:text-orange-500' : ''}`} />
+                <span className="font-medium text-xs">{post.score > 1000 ? `${(post.score / 1000).toFixed(1)}k` : post.score}</span>
+                </div>
+                <div 
+                    className="flex items-center gap-1.5 hover:bg-stone-100 dark:hover:bg-stone-800 px-2 py-1 rounded-md transition-colors"
+                >
+                <MessageSquare size={16} />
+                <span className="text-xs">{post.num_comments > 1000 ? `${(post.num_comments / 1000).toFixed(1)}k` : post.num_comments}</span>
+                </div>
+                
+                <button 
+                    onClick={handleShare}
+                    className="flex items-center gap-1.5 hover:bg-stone-100 dark:hover:bg-stone-800 px-2 py-1 rounded-md transition-colors btn-press active:bg-stone-200 dark:active:bg-stone-700"
+                    title="Share"
+                >
+                    {showCopied ? <Check size={16} className="text-emerald-500" /> : <Share2 size={16} />}
+                </button>
             </div>
             
-            <button 
-                onClick={handleShare}
-                className="flex items-center gap-1.5 hover:bg-stone-100 dark:hover:bg-stone-800 px-2 py-1 rounded-md transition-colors btn-press active:bg-stone-200 dark:active:bg-stone-700"
-                title="Share"
-            >
-                {showCopied ? <Check size={16} className="text-emerald-500" /> : <Share2 size={16} />}
-                <span className={`text-xs ${showCopied ? 'text-emerald-500 font-medium' : ''}`}>
-                    {showCopied ? 'Copied' : 'Share'}
-                </span>
-            </button>
-            
-            <div className="flex-1"></div>
             
             {post.domain !== `self.${post.subreddit}` && !post.domain?.includes('reddit.com') && (
                  <a 
@@ -510,9 +468,9 @@ const PostCard: React.FC<PostCardProps> = ({ post, isSeen = false, onClick, onNa
                         e.stopPropagation();
                         triggerHaptic();
                     }}
-                    className="flex items-center gap-1 text-xs hover:underline text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors p-2 -m-2"
+                    className="flex items-center gap-1 text-xs hover:underline text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors p-1"
                  >
-                     <span className="truncate max-w-[100px]">{post.domain}</span>
+                     <span className="truncate max-w-[80px]">{post.domain}</span>
                      <ExternalLink size={10} />
                  </a>
             )}

@@ -4,16 +4,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "rm -rf dist && tsc && vite build --outDir dist",
-    "build-pub": "rm -rf public && tsc && vite build --outDir public",
+    "build": "rimraf dist && tsc && vite build --outDir dist",
+    "build-pub": "rimraf public && tsc && vite build --outDir public",
     "preview": "vite preview"
   },
   "dependencies": {
     "date-fns": "^4.1.0",
+    "hls.js": "^1.5.8",
     "lucide-react": "^0.560.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "hls.js": "^1.5.8",
     "react-markdown": "^9.0.1",
     "remark-gfm": "^4.0.0"
   },
@@ -22,6 +22,7 @@
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^4.2.1",
+    "rimraf": "^6.1.2",
     "typescript": "^5.3.3",
     "vite": "^5.1.0"
   }

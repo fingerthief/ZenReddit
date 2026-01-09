@@ -40,13 +40,11 @@ const SEEN_EXPIRY_MS = 72 * 60 * 60 * 1000;
 const PostSkeleton: React.FC<{ viewMode: ViewMode }> = React.memo(({ viewMode }) => {
     if (viewMode === 'compact') {
         return (
-            <div className="bg-white dark:bg-stone-900 rounded-lg shadow-sm border border-stone-200 dark:border-stone-800 mb-2 animate-pulse flex overflow-hidden w-full h-[100px]">
-                 <div className="w-[80px] sm:w-[110px] bg-stone-200 dark:bg-stone-800 shrink-0 h-full"></div>
-                 <div className="flex-1 p-3 flex flex-col justify-between">
-                     <div className="space-y-2">
-                         <div className="h-4 bg-stone-200 dark:bg-stone-800 rounded w-full"></div>
-                         <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-2/3"></div>
-                     </div>
+            <div className="bg-white dark:bg-stone-900 rounded-lg shadow-sm border border-stone-200 dark:border-stone-800 animate-pulse flex overflow-hidden w-full h-[80px]">
+                 <div className="w-[80px] sm:w-[100px] m-2 mr-3 bg-stone-200 dark:bg-stone-800 shrink-0 rounded-md"></div>
+                 <div className="flex-1 py-3 pr-4 flex flex-col justify-center gap-2">
+                     <div className="h-4 bg-stone-200 dark:bg-stone-800 rounded w-full"></div>
+                     <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded w-1/2"></div>
                  </div>
             </div>
         )
@@ -568,7 +566,7 @@ const App: React.FC = () => {
               </div>
           </div>
 
-          <div className="max-w-4xl mx-auto pb-24 md:pb-10 pt-safe pl-safe pr-safe min-h-full">
+          <div className={`mx-auto pb-24 md:pb-10 pt-safe pl-safe pr-safe min-h-full transition-all duration-300 ${viewMode === 'compact' ? 'max-w-4xl' : 'max-w-[1600px] px-4'}`}>
             
             {/* Mobile Header */}
             <div className="md:hidden sticky top-0 z-30 bg-white/80 dark:bg-stone-950/80 backdrop-blur-lg border-b border-stone-200 dark:border-stone-800 px-4 py-3 flex items-center justify-between mb-4 transition-all">
@@ -686,9 +684,13 @@ const App: React.FC = () => {
             )}
 
             {/* Post Feed */}
-            <div className="space-y-4 md:space-y-6 columns-1 md:columns-1 lg:columns-1 gap-6 max-w-3xl mx-auto">
+            <div className={`mx-auto transition-all duration-300 ${
+                viewMode === 'compact' 
+                    ? 'max-w-3xl space-y-3' 
+                    : 'columns-1 sm:columns-2 lg:columns-3 2xl:columns-4 gap-6 pb-20'
+            }`}>
                 {posts.map((post) => (
-                    <LazyRender key={post.id} minHeight={200} className="break-inside-avoid">
+                    <LazyRender key={post.id} minHeight={200} className={`break-inside-avoid ${viewMode === 'card' ? 'mb-6' : ''}`}>
                         <PostCard 
                             post={post} 
                             isSeen={!!seenPosts[post.id]}
@@ -704,9 +706,20 @@ const App: React.FC = () => {
 
             {/* Skeletons for pagination loading */}
             {loadingPhase !== 'idle' && posts.length > 0 && (
-                <div className="mt-6 max-w-3xl mx-auto space-y-6">
-                    <PostSkeleton viewMode={viewMode} />
-                    <PostSkeleton viewMode={viewMode} />
+                <div className={`mx-auto mt-6 transition-all duration-300 ${
+                    viewMode === 'compact' 
+                        ? 'max-w-3xl space-y-3' 
+                        : 'columns-1 sm:columns-2 lg:columns-3 2xl:columns-4 gap-6'
+                }`}>
+                    <div className="break-inside-avoid mb-6">
+                        <PostSkeleton viewMode={viewMode} />
+                    </div>
+                    <div className="break-inside-avoid mb-6">
+                        <PostSkeleton viewMode={viewMode} />
+                    </div>
+                     <div className="break-inside-avoid mb-6 hidden lg:block">
+                        <PostSkeleton viewMode={viewMode} />
+                    </div>
                 </div>
             )}
             
