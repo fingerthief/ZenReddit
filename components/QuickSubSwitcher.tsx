@@ -77,17 +77,8 @@ const QuickSubSwitcher: React.FC<QuickSubSwitcherProps> = ({
 
   return (
     <>
-      {/* FAB Trigger - Only shown if NOT forced open (i.e. Desktop Mode) */}
-      {!forceOpen && (
-        <button
-            onClick={() => setIsOpen(true)}
-            className={`fixed bottom-6 right-6 z-40 w-14 h-14 bg-emerald-600 text-white rounded-full shadow-lg shadow-emerald-900/20 flex items-center justify-center hover:bg-emerald-700 active:scale-95 transition-all duration-200 ${isOpen ? 'scale-0 opacity-0' : 'scale-100 opacity-100'}`}
-            aria-label="Quick Switch Subreddit"
-        >
-            <Layers size={24} />
-        </button>
-      )}
-
+      {/* FAB Trigger - Removed */}
+      
       {/* Modal / Sheet */}
       {isOpen && (
         <div className="fixed inset-0 z-[60] flex flex-col justify-end md:justify-center md:items-center">

@@ -1039,7 +1039,7 @@ const PostDetail: React.FC<PostDetailProps> = ({ post, onClose, onNavigateSub, o
   return (
     <CommentContext.Provider value={contextValue}>
         <div 
-            className="fixed inset-0 z-50 flex items-end md:items-center justify-center animate-fade-smooth"
+            className="fixed inset-0 z-[60] flex items-end md:items-center justify-center animate-fade-smooth"
             onClick={onClose}
         >
         <div className="absolute inset-0 bg-black/60 backdrop-blur-md animate-fade-in" />

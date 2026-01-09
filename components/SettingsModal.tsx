@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, CircleAlert, Loader2, Shield, Key, Check, Search, Sparkles, Layers, Type, MessageSquare, Archive, Upload, Download, ShieldCheck, BarChart3 } from 'lucide-react';
-import { AIConfig, AIProvider } from '../types';
+import { X, Save, CircleAlert, Loader2, Shield, Key, Check, Search, Sparkles, Layers, Type, MessageSquare, Archive, Upload, Download, ShieldCheck, BarChart3, LayoutGrid, List } from 'lucide-react';
+import { AIConfig, AIProvider, ViewMode } from '../types';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -12,6 +12,8 @@ interface SettingsModalProps {
   onPageSizeChange: (size: number) => void;
   textSize: 'small' | 'medium' | 'large';
   onTextSizeChange: (size: 'small' | 'medium' | 'large') => void;
+  viewMode: ViewMode;
+  onViewModeChange: (mode: ViewMode) => void;
   blockedCount: number;
   blockedCommentCount: number;
 }
@@ -24,7 +26,7 @@ const POPULAR_MODELS = [
 ];
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ 
-    isOpen, onClose, config, onSave, pageSize, onPageSizeChange, textSize, onTextSizeChange, blockedCount, blockedCommentCount 
+    isOpen, onClose, config, onSave, pageSize, onPageSizeChange, textSize, onTextSizeChange, viewMode, onViewModeChange, blockedCount, blockedCommentCount 
 }) => {
   const [provider] = useState<AIProvider>('openrouter');
   const [openRouterKey, setOpenRouterKey] = useState('');
@@ -35,6 +37,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   
   const [localPageSize, setLocalPageSize] = useState(pageSize);
   const [localTextSize, setLocalTextSize] = useState(textSize);
+  const [localViewMode, setLocalViewMode] = useState<ViewMode>(viewMode);
   
   // New state for models
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
@@ -54,8 +57,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       setAnalyzeComments(config.analyzeComments || false);
       setLocalPageSize(pageSize);
       setLocalTextSize(textSize);
+      setLocalViewMode(viewMode);
     }
-  }, [isOpen, config, pageSize, textSize]);
+  }, [isOpen, config, pageSize, textSize, viewMode]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -112,6 +116,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     });
     onPageSizeChange(localPageSize);
     onTextSizeChange(localTextSize);
+    onViewModeChange(localViewMode);
 
     onClose();
   };
@@ -197,16 +202,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-      <div className="bg-white dark:bg-stone-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-stone-200 dark:border-stone-700 max-h-[90vh] flex flex-col animate-scale-in">
-        <div className="flex items-center justify-between p-4 border-b border-stone-100 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/50 sticky top-0 z-10 shrink-0">
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm sm:p-4 animate-fade-in">
+      <div className="bg-white dark:bg-stone-900 w-full max-w-md h-[92dvh] sm:h-auto sm:max-h-[90dvh] rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden border-t sm:border border-stone-200 dark:border-stone-700 flex flex-col animate-scale-in">
+        <div className="flex items-center justify-between p-4 border-b border-stone-100 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/50 shrink-0">
           <h2 className="text-lg font-semibold text-stone-800 dark:text-stone-100">Settings</h2>
           <button onClick={onClose} className="p-1.5 text-stone-500 hover:bg-stone-200 dark:hover:bg-stone-800 rounded-full transition-colors">
             <X size={20} />
           </button>
         </div>
 
-        <div className="p-6 space-y-8 overflow-y-auto custom-scrollbar">
+        <div className="p-4 sm:p-6 space-y-6 sm:space-y-8 overflow-y-auto custom-scrollbar flex-1 min-h-0">
             {/* Stats Dashboard (Visible on mobile primarily) */}
             <div className="bg-stone-50 dark:bg-stone-800/50 p-4 rounded-xl border border-stone-100 dark:border-stone-800 relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-3 opacity-10">
@@ -304,6 +309,35 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 
                 <div className="space-y-4">
+                    {/* View Mode */}
+                    <div>
+                        <label className="text-xs font-medium text-stone-500 dark:text-stone-400 mb-2 block">Post Style</label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                onClick={() => setLocalViewMode('card')}
+                                className={`flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border transition-all ${
+                                    localViewMode === 'card'
+                                        ? 'bg-stone-800 text-white dark:bg-stone-100 dark:text-stone-900 border-stone-800 dark:border-stone-100'
+                                        : 'bg-white dark:bg-stone-950 text-stone-600 dark:text-stone-400 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800'
+                                }`}
+                            >
+                                <LayoutGrid size={16} />
+                                <span>Card</span>
+                            </button>
+                            <button
+                                onClick={() => setLocalViewMode('compact')}
+                                className={`flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border transition-all ${
+                                    localViewMode === 'compact'
+                                        ? 'bg-stone-800 text-white dark:bg-stone-100 dark:text-stone-900 border-stone-800 dark:border-stone-100'
+                                        : 'bg-white dark:bg-stone-950 text-stone-600 dark:text-stone-400 border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800'
+                                }`}
+                            >
+                                <List size={16} />
+                                <span>Compact</span>
+                            </button>
+                        </div>
+                    </div>
+
                     {/* Page Size */}
                     <div>
                         <label className="text-xs font-medium text-stone-500 dark:text-stone-400 mb-2 block">Posts per Load</label>
@@ -536,7 +570,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         </div>
 
-        <div className="p-4 border-t border-stone-100 dark:border-stone-800 flex justify-end sticky bottom-0 bg-white dark:bg-stone-900 shrink-0">
+        <div className="p-4 border-t border-stone-100 dark:border-stone-800 flex justify-end bg-white dark:bg-stone-900 shrink-0" style={{ paddingBottom: 'max(1rem, var(--sab))' }}>
           <button
             onClick={handleSave}
             className="flex items-center space-x-2 bg-stone-800 dark:bg-stone-100 text-stone-100 dark:text-stone-900 px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity active:scale-95"

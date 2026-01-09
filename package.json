@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "rm -rf dist && tsc && vite build --outDir dist",
+    "build-pub": "rm -rf public && tsc && vite build --outDir public",
     "preview": "vite preview"
   },
   "dependencies": {

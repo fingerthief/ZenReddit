@@ -266,6 +266,7 @@ const App: React.FC = () => {
       if (refresh) {
           setLoadingPhase('fetching');
           setIsRefreshing(true);
+          setPosts([]);
       } else {
           // Pagination loading
       }
@@ -346,10 +347,13 @@ const App: React.FC = () => {
          
          const analysis = fresh || cached || { isRageBait: false, zenScore: 50, reason: '', id: p.data.id };
          
+         const currentThreshold = aiConfig.minZenScore ?? 50;
+         const isRageBait = analysis.zenScore < currentThreshold;
+
          return {
              ...p.data,
              ...analysis,
-             isRageBait: analysis.isRageBait,
+             isRageBait: isRageBait,
              zenScore: analysis.zenScore
          };
       });
@@ -386,7 +390,7 @@ const App: React.FC = () => {
   // Initial Load & Dependencies
   useEffect(() => {
     loadFeed(true);
-  }, [currentFeed, currentSub, currentSort, currentTopTime, currentSearchQuery]); // Only re-load when feed params change
+  }, [currentFeed, currentSub, currentSort, currentTopTime, currentSearchQuery, aiConfig.minZenScore]); // Only re-load when feed params change
 
   // Intersection Observer for Infinite Scroll
   useEffect(() => {
@@ -608,12 +612,12 @@ const App: React.FC = () => {
             {/* Sort Controls & Feed Title */}
             <div className="flex items-center justify-between mb-6 px-4 md:px-0">
                 <div className="flex flex-col">
-                    <h2 className="text-xl md:text-2xl font-bold text-stone-800 dark:text-stone-100 capitalize flex items-center gap-2">
-                        {currentFeed === 'search' ? `Results: "${currentSearchQuery}"` : 
-                         currentFeed === 'subreddit' ? `r/${currentSub}` :
-                         currentFeed === 'user' ? `u/${currentSub}` :
-                         `${currentFeed} Posts`}
-                    </h2>
+                    {!['subreddit', 'user'].includes(currentFeed) && (
+                        <h2 className="text-xl md:text-2xl font-bold text-stone-800 dark:text-stone-100 capitalize flex items-center gap-2">
+                            {currentFeed === 'search' ? `Results: "${currentSearchQuery}"` : 
+                             `${currentFeed} Posts`}
+                        </h2>
+                    )}
                     {loadingPhase !== 'idle' && loadingPhase !== 'fetching' && (
                         <p className="text-xs text-emerald-600 dark:text-emerald-400 animate-pulse font-medium">
                             {loadingPhase === 'analyzing' ? 'AI is scanning for toxicity...' : 'Filtering content...'}
@@ -622,24 +626,6 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
-                     {/* View Mode Toggle */}
-                     <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg p-1 flex items-center gap-1">
-                          <button 
-                             onClick={() => setViewMode('card')}
-                             className={`p-1.5 rounded ${viewMode === 'card' ? 'bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100' : 'text-stone-400 hover:text-stone-600'}`}
-                             title="Card View"
-                          >
-                              <LayoutGrid size={16} />
-                          </button>
-                          <button 
-                             onClick={() => setViewMode('compact')}
-                             className={`p-1.5 rounded ${viewMode === 'compact' ? 'bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100' : 'text-stone-400 hover:text-stone-600'}`}
-                             title="Compact View"
-                          >
-                              <List size={16} />
-                          </button>
-                     </div>
-
                     {/* Sort Dropdown */}
                     <div className="relative group z-10">
                         <button className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors">
@@ -780,6 +766,8 @@ const App: React.FC = () => {
         onPageSizeChange={setPageSize}
         textSize={textSize}
         onTextSizeChange={setTextSize}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
         blockedCount={blockedCount}
         blockedCommentCount={blockedCommentCount}
       />
@@ -811,18 +799,6 @@ const App: React.FC = () => {
         onScrollTop={scrollToTop}
         isScrolled={mainScrollRef.current ? mainScrollRef.current.scrollTop > 200 : false}
       />
-      
-      {/* Desktop Quick Switcher FAB */}
-      <div className="hidden md:block">
-         <QuickSubSwitcher
-            followedSubs={followedSubs}
-            onNavigate={handleNavigate}
-            onFollow={handleFollow}
-            currentFeed={currentFeed}
-            currentSub={currentSub}
-            forceOpen={false}
-         />
-      </div>
     </div>
   );
 };
